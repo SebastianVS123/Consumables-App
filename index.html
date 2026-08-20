@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Tracking App</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Login View -->
+        <div id="login-view" class="login-container">
+            <div class="login-card">
+                <h1>STOCK REGISTER</h1>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" id="login-username" required placeholder="Enter username">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="login-password" required placeholder="Enter password">
+                    </div>
+                    <button type="submit">SIGN IN</button>
+                </form>
+                <div id="login-error" class="error-msg" style="color: var(--danger-color); margin-top: 1rem; text-align: center; font-size: 0.875rem; display: none;">
+                    Invalid username or password
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin View -->
+        <div id="admin-view" class="container hidden">
+            <header>
+                <div class="header-info">
+                    <h1>System Administration</h1>
+                    <p>Signed in as: <span id="admin-name">Admin</span></p>
+                </div>
+                <button onclick="app.logout()" class="secondary" style="width: auto;">SIGN OUT</button>
+            </header>
+
+            <div class="dashboard-grid">
+                <div>
+                    <div class="card">
+                        <h2 class="card-title">Add Team Leader</h2>
+                        <form id="add-leader-form">
+                            <div class="form-group">
+                                <label>Username (used to log in)</label>
+                                <input type="text" id="leader-username" required placeholder="e.g. sebastian">
+                            </div>
+                            <div class="form-group">
+                                <label>Full Name</label>
+                                <input type="text" id="leader-name" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Password</label>
+                                <input type="password" id="leader-pass" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Subsection</label>
+                                <select id="leader-subsection" required>
+                                    <option value="Management">Management</option>
+                                    <option value="Quality">Quality</option>
+                                    <option value="Logistics">Logistics</option>
+                                    <option value="Production">Production</option>
+                                    <option value="Paint">Paint</option>
+                                    <option value="Safety">Safety</option>
+                                </select>
+                            </div>
+                            <button type="submit">ADD TEAM LEADER</button>
+                        </form>
+                    </div>
+
+                    <div class="card">
+                        <h2 class="card-title">Registered Team Leaders</h2>
+                        <div class="admin-table-container">
+                            <table id="leaders-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Subsection</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="card">
+                        <h2 class="card-title">Reports</h2>
+                        <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1rem;">
+                            Export all stock movements to Excel (CSV).
+                        </p>
+                        <button onclick="app.exportData()">DOWNLOAD EXCEL SHEET</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Team Leader View -->
+        <div id="leader-view" class="container hidden">
+            <header>
+                <div class="header-info">
+                    <h1 id="view-title">MANAGEMENT SUBSECTION</h1>
+                    <p>Team leader: <span id="leader-display-name">sebastian</span></p>
+                </div>
+                <button onclick="app.logout()" class="secondary" style="width: auto;">SIGN OUT</button>
+            </header>
+
+            <div class="dashboard-grid">
+                <!-- Left Column -->
+                <div class="main-form">
+                    <div class="card">
+                        <h2 class="card-title">New Stock Movement</h2>
+                        <form id="movement-form">
+                            <div class="form-group">
+                                <label>ALLOCATE TO EMPLOYEE</label>
+                                <select id="allocate-employee" required>
+                                    <option value="">No employees added yet</option>
+                                </select>
+                                <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                                    Add the people on your shift in the roster panel first.
+                                </p>
+                            </div>
+
+                            <div class="form-group">
+                                <label>WHAT ARE YOU ISSUING?</label>
+                                <div class="toggle-group">
+                                    <button type="button" class="toggle-btn active" data-type="PPE">PPE</button>
+                                    <button type="button" class="toggle-btn" data-type="CONSUMABLES">CONSUMABLES</button>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>ITEM</label>
+                                <select id="item-select" required>
+                                    <option value="Gloves">Gloves</option>
+                                    <option value="Markers">Markers</option>
+                                    <option value="Cloths">Cloths</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+
+                            <div id="other-item-container" class="form-group hidden">
+                                <label>SPECIFY OTHER ITEM</label>
+                                <input type="text" id="other-item-text">
+                            </div>
+
+                            <div class="amount-grid">
+                                <div class="card" style="padding: 1rem; margin-bottom: 0;">
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="check-issued">
+                                        <label for="check-issued">Amount Issued</label>
+                                    </div>
+                                    <input type="number" id="amount-issued" value="0" min="0">
+                                </div>
+                                <div class="card" style="padding: 1rem; margin-bottom: 0;">
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="check-received">
+                                        <label for="check-received">Amount Received</label>
+                                    </div>
+                                    <input type="number" id="amount-received" value="0" min="0">
+                                </div>
+                            </div>
+
+                            <div class="form-group" style="margin-top: 1.5rem;">
+                                <label>NOTES (OPTIONAL)</label>
+                                <textarea id="notes" placeholder="Who received it, job number..." rows="2"></textarea>
+                            </div>
+
+                            <button type="submit">SUBMIT</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="side-panels">
+                    <div class="card">
+                        <h2 class="card-title">My Shift Employees</h2>
+                        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                            The people you are responsible for. Every movement is allocated to one of them.
+                        </p>
+                        <form id="add-employee-form" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                            <input type="text" id="employee-name" placeholder="Employee full name" required>
+                            <button type="submit" style="width: auto; padding: 0.5rem 1rem;">ADD</button>
+                        </form>
+                        <ul id="employee-list" style="list-style: none; font-size: 0.875rem; color: var(--text-secondary);">
+                            <li>No employees added yet.</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <h2 class="card-title">Your Recent Entries</h2>
+                        <div id="recent-entries" style="font-size: 0.875rem; color: var(--text-secondary);">
+                            No entries yet.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Confirmation Modal -->
+        <div id="confirm-modal" class="modal">
+            <div class="modal-content">
+                <h2 style="margin-bottom: 1rem;">Confirm Submission</h2>
+                <p id="confirm-details"></p>
+                <p style="margin-top: 1rem; font-weight: 600;">Are you sure you are happy with all your data?</p>
+                <div class="modal-actions">
+                    <button id="btn-cancel" class="secondary">Cancel</button>
+                    <button id="btn-confirm">Yes, Submit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="script.js"></script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2e225ee694ec479',t:'MTc4NzIzNjc3NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f"}' crossorigin="anonymous"></script>
+</body>
+</html>
