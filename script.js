@@ -22,25 +22,75 @@ const app = {
     },
 
     setupEventListeners() {
+        const showError = (msg) => {
+            const el = document.getElementById('login-error');
+            el.textContent = msg;
+            el.style.display = 'block';
+            el.style.color = '#ef4444';
+            el.style.marginTop = '1rem';
+            el.style.textAlign = 'center';
+            el.style.fontSize = '0.85rem';
+            console.error('LOGIN ERROR:', msg);
+        };
+
         // LOGIN
         document.getElementById('login-form').onsubmit = async (e) => {
             e.preventDefault();
+            hideError();
+
             const username = document.getElementById('login-username').value.trim().toLowerCase();
             const password = document.getElementById('login-password').value;
 
-            // Query Supabase for the user
-            const { data, error } = await supabase
-                .from('users')
-                .select('*')
-                .eq('username', username)
-                .eq('password', password)
-                .single();
-
-            if (error || !data) {
-                document.getElementById('login-error').style.display = 'block';
+            if (!username || !password) {
+                showError('Please type both username and password.');
                 return;
             }
-            await this.login(data);
+
+            // Show "checking..." while we wait
+            showError('Checking...');
+            document.getElementById('login-error').style.color = '#94a3b8';
+
+            // First, sanity check that Supabase is reachable
+            if (!supabase) {
+                hideError();
+                showError('Supabase is not loaded. Check your internet connection.');
+                return;
+            }
+
+            try {
+                const { data, error } = await supabase
+                    .from('users')
+                    .select('*')
+                    .eq('username', username)
+                    .eq('password', password)
+                    .single();
+
+                if (error) {
+                    hideError();
+                    if (error.code === 'PGRST116') {
+                        showError('No user found with those details. (Tables might not exist yet — run the SQL in Supabase.)');
+                    } else if (error.message && error.message.includes('relation')) {
+                        showError('Database tables do not exist yet. Run the SQL setup in Supabase.');
+                    } else {
+                        showError('DB Error: ' + (error.message || JSON.stringify(error)));
+                    }
+                    return;
+                }
+                if (!data) {
+                    hideError();
+                    showError('No user with that username/password exists.');
+                    return;
+                }
+                await this.login(data);
+            } catch (err) {
+                hideError();
+                showError('Connection error: ' + err.message);
+            }
+        };
+
+        const hideError = () => {
+            const el = document.getElementById('login-error');
+            el.style.display = 'none';
         };
 
         // ADMIN: Add Team Leader
