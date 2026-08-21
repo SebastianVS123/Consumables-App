@@ -247,7 +247,16 @@ const app = {
         const activeType = formEl.querySelector('.toggle-btn.active').dataset.type;
         let firstVisible = null;
         for (const opt of Array.from(selectEl.options)) {
-            if (!opt.dataset.category) continue;
+            // "Other" is always available under both PPE and Consumables
+            if (opt.value === 'Other') {
+                opt.style.display = '';
+                continue;
+            }
+            // Items without a category are hidden
+            if (!opt.dataset.category) {
+                opt.style.display = 'none';
+                continue;
+            }
             const visible = opt.dataset.category === activeType;
             opt.style.display = visible ? '' : 'none';
             if (visible && firstVisible === null) firstVisible = opt.value;
@@ -483,7 +492,7 @@ const app = {
             const issuing = data.issued || 0;
             const receiving = data.received || 0;
             if (issuing <= 0 && receiving <= 0) {
-                return alert('Enter an amount in either "Amount Issued" or "Used Stock Received".');
+                return alert('Enter an amount in either "Amount Issued" or "Old Stock Returned".');
             }
 
             if (data.type === 'CONSUMABLES' && issuing > 0) {
@@ -496,7 +505,7 @@ const app = {
                         Current usable stock across all departments: <strong>${Math.max(0, liveStock)}</strong>.
                         <br><br>
                         Continuing will leave usable stock at <strong style="color:#ef4444;">${projectedAfter}</strong>.
-                        ${receiving > 0 ? '<br><br><em>(Used stock being disposed is logged but does not re-enter inventory.)</em>' : ''}
+                        ${receiving > 0 ? '<br><br><em>(Old stock being returned is logged but does not re-enter inventory.)</em>' : ''}
                     `;
                     document.getElementById('warning-modal').style.display = 'flex';
                     return;
@@ -606,16 +615,23 @@ const app = {
 
         const sortedEntries = [...this.entries].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
-        // Table 1: per-(department,item) running totals
-        const totalsByDept = {};
+        // =========== TABLE 1: per-(department, item) running totals ===========
+        const totalsByDeptItem = {};
         sortedEntries.forEach(e => {
             const deptKey = `${e.subsection}-${e.item}`;
-            totalsByDept[deptKey] = (totalsByDept[deptKey] || 0) + (e.received - e.issued);
+            // Only `issued` (new stock going out) affects usable-stock running totals here.
+            // Used stock returned on issue rows is audit/disposal and does not contribute.
+            if (!e.employee) {
+                totalsByDeptItem[deptKey] = (totalsByDeptItem[deptKey] || 0) + (e.received || 0);
+            } else {
+                totalsByDeptItem[deptKey] = (totalsByDeptItem[deptKey] || 0) - (e.issued || 0);
+            }
         });
 
         let movementRows = '';
         sortedEntries.forEach(e => {
             const deptKey = `${e.subsection}-${e.item}`;
+            const isIssue = !!e.employee;
             movementRows += `
                 <tr>
                     <td>${e.subsection}</td>
@@ -624,36 +640,46 @@ const app = {
                     <td>${e.type || ''}</td>
                     <td>${e.leader_name}</td>
                     <td>${e.employee || ''}</td>
-                    <td style="text-align:right;">${e.issued || 0}</td>
-                    <td style="text-align:right;">${e.received || 0}</td>
-                    <td style="text-align:right;font-weight:bold;">${totalsByDept[deptKey]}</td>
+                    <td style="text-align:right;">${isIssue ? (e.issued || 0) : (e.received || 0)}</td>
+                    <td style="text-align:right;">${isIssue ? (e.received || 0) : 0}</td>
+                    <td style="text-align:right;font-weight:bold;">${totalsByDeptItem[deptKey]}</td>
                     <td>${e.notes || ''}</td>
                 </tr>`;
         });
 
-        // Table 2: usable stock per item across all departments.
-        // Formula: Arrival receipts (employee is null) - Issued new stock.
-        // Used stock returned from employees is audit-only (disposed), NOT included.
-        const stockByItem = {};
+        // =========== TABLE 2: per-SKU running totals ===========
+        // Sums separately for each item across all departments:
+        //   - Total Arrived (usable stock coming in)
+        //   - Total Issued (new stock given out)
+        //   - Total Old Stock Returned (audit/disposal — separate column)
+        //   - Current Usable Stock = Total Arrived − Total Issued
+        const skuStats = {};
         sortedEntries.forEach(e => {
+            if (!skuStats[e.item]) {
+                skuStats[e.item] = { arrived: 0, issued: 0, returned: 0 };
+            }
             if (!e.employee) {
-                // Arrival: adds to usable stock
-                stockByItem[e.item] = (stockByItem[e.item] || 0) + (e.received || 0);
+                // Arrival row
+                skuStats[e.item].arrived += (e.received || 0);
             } else {
-                // Issue: only `issued` depletes usable stock
-                // e.received here is audit/disposal only — ignored for stock level
-                stockByItem[e.item] = (stockByItem[e.item] || 0) - (e.issued || 0);
+                // Issue row
+                skuStats[e.item].issued += (e.issued || 0);
+                skuStats[e.item].returned += (e.received || 0); // audit only
             }
         });
 
-        const sortedItems = Object.entries(stockByItem).sort((a, b) => a[0].localeCompare(b[0]));
-        let stockRows = '';
-        sortedItems.forEach(([item, total]) => {
-            const styleCol = total >= 0 ? 'color:#22c55e' : 'color:#ef4444';
-            stockRows += `
+        const sortedSkuRows = Object.entries(skuStats).sort((a, b) => a[0].localeCompare(b[0]));
+        let skuRows = '';
+        sortedSkuRows.forEach(([item, s]) => {
+            const usable = s.arrived - s.issued;
+            const styleCol = usable >= 0 ? 'color:#22c55e' : 'color:#ef4444';
+            skuRows += `
                 <tr>
                     <td>${item}</td>
-                    <td style="text-align:right;font-weight:bold;${styleCol};">${total}</td>
+                    <td style="text-align:right;">${s.arrived}</td>
+                    <td style="text-align:right;">${s.issued}</td>
+                    <td style="text-align:right;font-weight:bold;${styleCol};">${usable}</td>
+                    <td style="text-align:right;">${s.returned}</td>
                 </tr>`;
         });
 
@@ -675,21 +701,28 @@ const app = {
             </head>
             <body>
                 <div class="title">Stock Tracking Report — ${new Date().toLocaleDateString()}</div>
-                <div class="section">1. Stock Movements</div>
+
+                <div class="section">1. Stock Movements (per case)</div>
                 <table>
                     <thead><tr>
                         <th>Department</th><th>Date</th><th>Item</th><th>Type</th>
                         <th>Team Leader</th><th>Allocated To</th>
-                        <th>Issued Qty (new)</th><th>Received Qty (audit/disposal)</th>
-                        <th>Running Total</th><th>Notes</th>
+                        <th>Movement Qty</th><th>Old Stock Returned (audit/disposal)</th>
+                        <th>Running Usable Total</th><th>Notes</th>
                     </tr></thead>
                     <tbody>${movementRows}</tbody>
                 </table>
 
-                <div class="section">2. Stock Levels (Usable stock = Arrival Received − Issued, all departments)</div>
+                <div class="section">2. Stock Levels by SKU</div>
                 <table>
-                    <thead><tr><th>Item</th><th>Current Usable Stock</th></tr></thead>
-                    <tbody>${stockRows}</tbody>
+                    <thead><tr>
+                        <th>Item</th>
+                        <th>Total Arrived (new)</th>
+                        <th>Total Issued (new)</th>
+                        <th>Current Usable Stock</th>
+                        <th>Total Old Stock Returned (audit/disposal)</th>
+                    </tr></thead>
+                    <tbody>${skuRows}</tbody>
                 </table>
             </body>
             </html>
