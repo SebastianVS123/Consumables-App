@@ -207,11 +207,11 @@ const app = {
             });
         }
 
-        // Live-update stock hint on the issue page when amount / item changes
-        const issuedAmtInput = document.getElementById('amount-issued');
-        if (issuedAmtInput) {
-            issuedAmtInput.addEventListener('input', () => self.refreshStockHint());
-        }
+        // Live-update stock hint when either amount field changes
+        ['amount-issued', 'amount-received'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('input', () => self.refreshStockHint());
+        });
 
         // Issue form submit
         document.getElementById('movement-form').onsubmit = function (e) {
@@ -237,7 +237,6 @@ const app = {
         };
         document.getElementById('btn-warn-force').onclick = () => {
             document.getElementById('warning-modal').style.display = 'none';
-            // Bypass check and submit anyway
             self._forceSubmitOnWarning = true;
             self.submitMovement();
         };
@@ -403,13 +402,22 @@ const app = {
 
         const recentHtml = subEntries.length
             ? subEntries.map(e => {
-                const action = e.received > 0
-                    ? `<span style="color:#22c55e;">📥 +${e.received}</span>`
-                    : `<span style="color:#f97316;">📤 -${e.issued}</span>`;
+                const isIssue = !!e.employee;
+                const parts = [];
+                if (e.issued > 0)  parts.push(`<span style="color:#f97316;">📤 issued -${e.issued}</span>`);
+                if (e.received > 0) {
+                    if (isIssue) {
+                        // For issue rows, received = audit/disposal (not new stock)
+                        parts.push(`<span style="color:#94a3b8;">🗑 disposed +${e.received}</span>`);
+                    } else {
+                        parts.push(`<span style="color:#22c55e;">📦 arrived +${e.received}</span>`);
+                    }
+                }
+                const action = parts.length ? parts.join(' · ') : '<span style="color:#94a3b8;">—</span>';
                 return `
                     <div style="border-bottom:1px solid var(--border-color);padding:0.5rem 0;">
                         <div style="display:flex;justify-content:space-between;font-weight:600;">
-                            <span>${e.item} → ${e.employee || '(incoming)'}</span>
+                            <span>${e.item} ${e.employee ? '→ ' + e.employee : ''}</span>
                             ${action}
                         </div>
                         <div style="font-size:0.75rem;color:#94a3b8;">${(e.type || '').toLowerCase()} · ${new Date(e.created_at).toLocaleString()}</div>
@@ -423,14 +431,22 @@ const app = {
     },
 
     // ============ STOCK LEVEL HELPERS ============
-    // Computes total usable stock for an item across ALL departments:
-    // sum(received from arrivals) - sum(issued)
+    // Usable stock only considers ARRIVAL receipts (employee==null rows) minus
+    // ISSUED new stock. The "used stock returned from employee" recorded on
+    // the Issue page is treated as DISPOSED and does NOT re-enter usable inventory.
     computeUsableStock(itemName) {
         let received = 0, issued = 0;
         for (const e of this.entries) {
             if (e.item !== itemName) continue;
-            received += (e.received || 0);
-            issued += (e.issued || 0);
+            if (e.employee) {
+                // Issue row: only `issued` depletes usable stock.
+                // The `received` amount here is used stock coming back from the
+                // employee — logged for audit, but discarded (disposed of).
+                issued += (e.issued || 0);
+            } else {
+                // Arrival row: new usable stock coming in.
+                received += (e.received || 0);
+            }
         }
         return received - issued;
     },
@@ -439,15 +455,22 @@ const app = {
         const hintEl = document.getElementById('stock-hint');
         if (!hintEl) return;
         const itemSel = document.getElementById('item-select');
-        const otherInput = document.getElementById('other-item-text');
         if (!itemSel || itemSel.value === 'Other') {
             hintEl.innerHTML = '&nbsp;';
             return;
         }
         const item = itemSel.value;
         const stock = this.computeUsableStock(item);
+        const issuedEl = document.getElementById('amount-issued');
+        const issued = parseInt(issuedEl ? (issuedEl.value || '0') : '0');
+        const projected = stock - issued;  // used-returned does NOT affect usable stock
         const colour = stock >= 0 ? '#22c55e' : '#ef4444';
-        hintEl.innerHTML = `Current usable stock across all departments: <strong style="color:${colour}">${stock}</strong>`;
+        const pColour = projected >= 0 ? '#22c55e' : '#ef4444';
+        hintEl.innerHTML =
+            `Current usable stock: <strong style="color:${colour}">${stock}</strong>` +
+            (issued > 0
+                ? ` · After this issue: <strong style="color:${pColour}">${projected}</strong>`
+                : '');
     },
 
     // ============ FORM SUBMISSIONS ============
@@ -457,35 +480,48 @@ const app = {
 
         if (kind === 'issue') {
             if (!data.employee) return alert('Please select an employee.');
-            if (!data.amount || data.amount <= 0) return alert('Please enter an amount greater than 0.');
+            const issuing = data.issued || 0;
+            const receiving = data.received || 0;
+            if (issuing <= 0 && receiving <= 0) {
+                return alert('Enter an amount in either "Amount Issued" or "Used Stock Received".');
+            }
 
-            // Check over-issuing — only when typeof=CONSUMABLES (per requirement)
-            if (data.type === 'CONSUMABLES') {
-                const stock = this.computeUsableStock(data.item);
-                if (data.amount > Math.max(0, stock)) {
-                    // Show warning — let user decide
+            if (data.type === 'CONSUMABLES' && issuing > 0) {
+                const liveStock = this.computeUsableStock(data.item);
+                if (issuing > Math.max(0, liveStock)) {
+                    const projectedAfter = liveStock - issuing;
                     document.getElementById('warning-details').innerHTML = `
-                        You are issuing <strong>${data.amount}</strong> of <strong>${data.item}</strong>, but
-                        only <strong>${Math.max(0, stock)}</strong> is currently showing as usable stock
-                        across all departments.
+                        You are issuing <strong>${issuing}</strong> of <strong>${data.item}</strong>.
                         <br><br>
-                        Continuing will result in a negative stock level for this item.
+                        Current usable stock across all departments: <strong>${Math.max(0, liveStock)}</strong>.
+                        <br><br>
+                        Continuing will leave usable stock at <strong style="color:#ef4444;">${projectedAfter}</strong>.
+                        ${receiving > 0 ? '<br><br><em>(Used stock being disposed is logged but does not re-enter inventory.)</em>' : ''}
                     `;
                     document.getElementById('warning-modal').style.display = 'flex';
                     return;
                 }
             }
+
+            document.getElementById('confirm-details').innerHTML = `
+                Type: ${data.type}<br>
+                Item: ${data.item}<br>
+                Employee: ${data.employee}<br>
+                Amount Issued: ${issuing}<br>
+                Used Stock Returned (audit / disposed): ${receiving}<br>
+                <span style="font-size:0.75rem;color:var(--text-secondary);">Note: returned used stock is logged only for audit and does NOT re-enter usable inventory.</span><br>
+                Notes: ${data.notes || '(none)'}
+            `;
         } else if (kind === 'arrival') {
             if (!data.amount || data.amount <= 0) return alert('Please enter an amount greater than 0.');
+            document.getElementById('confirm-details').innerHTML = `
+                Type: ${data.type}<br>
+                Item: ${data.item}<br>
+                Amount Received: ${data.amount}<br>
+                Notes: ${data.notes || '(none)'}
+            `;
         }
 
-        document.getElementById('confirm-details').innerHTML = `
-            Type: ${data.type}<br>
-            Item: ${data.item}<br>
-            ${data.employee ? 'Employee: ' + data.employee + '<br>' : ''}
-            ${kind === 'issue' ? 'Issued' : 'Received'}: ${data.amount}<br>
-            Notes: ${data.notes || '(none)'}
-        `;
         document.getElementById('confirm-modal').dataset.kind = kind;
         document.getElementById('confirm-modal').style.display = 'flex';
     },
@@ -499,18 +535,30 @@ const app = {
         const itemSel = form.querySelector('select[id$="item-select"]');
         const otherInput = form.querySelector('input[id$="other-item-text"]');
         const empSel = form.querySelector('select[id$="allocate-employee"]');
-        const amountInput = form.querySelector('input[type="number"]');
         const notesInput = form.querySelector('textarea');
 
         let item = itemSel.value;
         if (item === 'Other') item = (otherInput.value || '').trim();
         if (!item) { alert('Please select / specify an item.'); return null; }
 
+        let issued = 0, received = 0, amount = 0;
+        if (kind === 'issue') {
+            const issuedEl = form.querySelector('#amount-issued');
+            const receivedEl = form.querySelector('#amount-received');
+            issued = parseInt(issuedEl ? (issuedEl.value || '0') : '0');
+            received = parseInt(receivedEl ? (receivedEl.value || '0') : '0');
+        } else {
+            const arrivalEl = form.querySelector('#arrival-amount');
+            amount = parseInt(arrivalEl ? (arrivalEl.value || '0') : '0');
+        }
+
         return {
             type,
             item,
             employee: empSel ? empSel.value : '',
-            amount: parseInt(amountInput.value || '0'),
+            issued,
+            received,
+            amount,
             notes: (notesInput.value || '').trim()
         };
     },
@@ -527,15 +575,12 @@ const app = {
             type: data.type,
             item: data.item,
             employee: data.employee || null,
-            issued: kind === 'issue' ? data.amount : 0,
-            received: kind === 'arrival' ? data.amount : 0,
+            issued: kind === 'issue' ? (data.issued || 0) : 0,
+            received: kind === 'issue' ? (data.received || 0) : (data.amount || 0),
             notes: data.notes
         };
 
-        const forceFlag = this._forceSubmitOnWarning === true;
         this._forceSubmitOnWarning = false;
-
-        // Re-check over-issue warning if user clicked "Submit Anyway" without seeing it again? Already shown — bypass.
 
         const { error } = await db.from('stock_entries').insert([insertRow]);
         if (error) return alert('Save failed: ' + error.message);
@@ -548,6 +593,7 @@ const app = {
         document.getElementById(otherContainerId).classList.add('hidden');
         this.setActiveToggle(formId, 'PPE');
         this.filterItemsByCategory(document.getElementById(kind === 'issue' ? 'item-select' : 'arrival-item-select'));
+        if (kind === 'issue') this.refreshStockHint();
 
         await this.loadEntries();
         this.showHub();
@@ -560,7 +606,7 @@ const app = {
 
         const sortedEntries = [...this.entries].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
-        // Table 1: per-(department,item) running totals (unchanged)
+        // Table 1: per-(department,item) running totals
         const totalsByDept = {};
         sortedEntries.forEach(e => {
             const deptKey = `${e.subsection}-${e.item}`;
@@ -570,27 +616,34 @@ const app = {
         let movementRows = '';
         sortedEntries.forEach(e => {
             const deptKey = `${e.subsection}-${e.item}`;
-            const direction = e.received > 0 ? 'Received' : 'Issued';
-            const amt = e.received > 0 ? e.received : e.issued;
             movementRows += `
                 <tr>
                     <td>${e.subsection}</td>
                     <td>${new Date(e.created_at).toLocaleString()}</td>
                     <td>${e.item}</td>
                     <td>${e.type || ''}</td>
-                    <td>${direction}</td>
                     <td>${e.leader_name}</td>
                     <td>${e.employee || ''}</td>
-                    <td style="text-align:right;">${amt}</td>
+                    <td style="text-align:right;">${e.issued || 0}</td>
+                    <td style="text-align:right;">${e.received || 0}</td>
                     <td style="text-align:right;font-weight:bold;">${totalsByDept[deptKey]}</td>
                     <td>${e.notes || ''}</td>
                 </tr>`;
         });
 
-        // Table 2: usable stock per item across all departments (Received - Issued)
+        // Table 2: usable stock per item across all departments.
+        // Formula: Arrival receipts (employee is null) - Issued new stock.
+        // Used stock returned from employees is audit-only (disposed), NOT included.
         const stockByItem = {};
         sortedEntries.forEach(e => {
-            stockByItem[e.item] = (stockByItem[e.item] || 0) + (e.received - e.issued);
+            if (!e.employee) {
+                // Arrival: adds to usable stock
+                stockByItem[e.item] = (stockByItem[e.item] || 0) + (e.received || 0);
+            } else {
+                // Issue: only `issued` depletes usable stock
+                // e.received here is audit/disposal only — ignored for stock level
+                stockByItem[e.item] = (stockByItem[e.item] || 0) - (e.issued || 0);
+            }
         });
 
         const sortedItems = Object.entries(stockByItem).sort((a, b) => a[0].localeCompare(b[0]));
@@ -626,8 +679,9 @@ const app = {
                 <table>
                     <thead><tr>
                         <th>Department</th><th>Date</th><th>Item</th><th>Type</th>
-                        <th>Direction</th><th>Team Leader</th><th>Allocated To</th>
-                        <th>Quantity</th><th>Running Total</th><th>Notes</th>
+                        <th>Team Leader</th><th>Allocated To</th>
+                        <th>Issued Qty (new)</th><th>Received Qty (audit/disposal)</th>
+                        <th>Running Total</th><th>Notes</th>
                     </tr></thead>
                     <tbody>${movementRows}</tbody>
                 </table>
