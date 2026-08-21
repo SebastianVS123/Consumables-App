@@ -90,7 +90,7 @@
             </div>
         </div>
 
-        <!-- =========== HUB VIEW (Team leader entry point) =========== -->
+        <!-- =========== HUB VIEW =========== -->
         <div id="hub-view" class="container hidden">
             <header>
                 <div class="header-info">
@@ -114,7 +114,7 @@
                     <div class="hub-icon">📥</div>
                     <h2 class="card-title">Log Arriving Stock</h2>
                     <p style="color: var(--text-secondary); font-size: 0.85rem;">
-                        Record stock that arrived from procurement or another department.
+                        Record new stock that arrived — purchase, transfer in, supplier delivery.
                     </p>
                     <button type="button" style="margin-top:1rem;">LOG ARRIVAL</button>
                 </div>
@@ -129,7 +129,7 @@
                     <p>Team leader: <span id="leader-display-name">—</span></p>
                 </div>
                 <div style="display:flex; gap:0.5rem;">
-                    <button onclick="app.showHub()" class="secondary" style="width:auto;">← HUB</button>
+                    <button onclick="app.showHub()" class="secondary" style="width:auto;">&larr; HUB</button>
                     <button onclick="app.logout()" class="secondary" style="width:auto;">SIGN OUT</button>
                 </div>
             </header>
@@ -181,6 +181,9 @@
                             <div class="form-group">
                                 <label>AMOUNT ISSUED</label>
                                 <input type="number" id="amount-issued" value="0" min="0">
+                                <p id="stock-hint" style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                                    &nbsp;
+                                </p>
                             </div>
 
                             <div class="form-group">
@@ -197,7 +200,7 @@
                     <div class="card">
                         <h2 class="card-title">My Shift Employees</h2>
                         <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem;">
-                            Add the people on your shift. Every movement must be allocated to one of them.
+                            Add the people on your shift. Every issue must be allocated to one of them.
                         </p>
                         <form id="add-employee" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
                             <input type="text" placeholder="Employee full name" required>
@@ -218,7 +221,7 @@
             </div>
         </div>
 
-        <!-- =========== ARRIVAL VIEW =========== -->
+        <!-- =========== ARRIVAL VIEW (NO employee allocation) =========== -->
         <div id="arrival-view" class="container hidden">
             <header>
                 <div class="header-info">
@@ -226,26 +229,19 @@
                     <p>Team leader: <span id="arrival-display-name">—</span></p>
                 </div>
                 <div style="display:flex; gap:0.5rem;">
-                    <button onclick="app.showHub()" class="secondary" style="width:auto;">← HUB</button>
+                    <button onclick="app.showHub()" class="secondary" style="width:auto;">&larr; HUB</button>
                     <button onclick="app.logout()" class="secondary" style="width:auto;">SIGN OUT</button>
                 </div>
             </header>
 
-            <div class="dashboard-grid">
+            <div class="dashboard-grid single-col">
                 <div class="main-form">
                     <div class="card">
                         <h2 class="card-title">📥 Log Arriving Stock</h2>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
+                            Recording new stock arriving. No employee allocation is needed.
+                        </p>
                         <form id="arrival-form">
-                            <div class="form-group">
-                                <label>ALLOCATE TO EMPLOYEE</label>
-                                <select id="arrival-allocate-employee" required>
-                                    <option value="">No employees added yet</option>
-                                </select>
-                                <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                                    Tag the employee who received / signed for this arrival.
-                                </p>
-                            </div>
-
                             <div class="form-group">
                                 <label>WHAT IS ARRIVING?</label>
                                 <div class="toggle-group">
@@ -289,29 +285,6 @@
                         </form>
                     </div>
                 </div>
-
-                <div class="side-panels">
-                    <div class="card">
-                        <h2 class="card-title">My Shift Employees</h2>
-                        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem;">
-                            Add the people on your shift. Every movement must be allocated to one of them.
-                        </p>
-                        <form id="add-employee-arrival" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-                            <input type="text" placeholder="Employee full name" required>
-                            <button type="submit" style="width: auto; padding: 0.5rem 1rem;">ADD</button>
-                        </form>
-                        <ul id="employee-list-arrival" style="list-style: none; font-size: 0.875rem; color: var(--text-secondary);">
-                            <li>No employees added yet.</li>
-                        </ul>
-                    </div>
-
-                    <div class="card">
-                        <h2 class="card-title">Your Recent Entries</h2>
-                        <div id="recent-entries-arrival" style="font-size: 0.875rem; color: var(--text-secondary);">
-                            No entries yet.
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -328,9 +301,21 @@
             </div>
         </div>
 
+        <!-- =========== WARNING MODAL (over-issue) =========== -->
+        <div id="warning-modal" class="modal">
+            <div class="modal-content" style="border: 2px solid var(--danger-color);">
+                <h2 style="margin-bottom: 1rem; color: var(--danger-color);">⚠️ Warning: Stock Issue</h2>
+                <p id="warning-details"></p>
+                <div class="modal-actions">
+                    <button id="btn-warn-cancel" class="secondary">Cancel</button>
+                    <button id="btn-warn-force" style="background-color: var(--danger-color);">Submit Anyway</button>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="script.js"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2e7d09c7bc255b9',t:'MTc4NzI5NjE5Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2e7e8bd8cbe55b9',t:'MTc4NzI5NzE4Mg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
