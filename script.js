@@ -1,8 +1,6 @@
 // ============== SUPABASE CONFIG ==============
 const SUPABASE_URL = 'https://okbscacqmsvmvmtewrlh.supabase.co';
-// ⚠️ PASTE WHICHEVER KEY WORKED FOR YOU BEFORE:
-// Either your LEGACY JWT key (starts with eyJ...) OR your PUBLISHABLE key (starts with sb_publishable_)
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rYnNjYWNxbXN2bXZtdGV3cmxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzE3NjAsImV4cCI6MjEwMjgwNzc2MH0.uf30y8ce13VoIUTB1eyfurxellJa0sShsXeb335AnQI'; // <-- PUT YOUR WORKING KEY HERE
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rYnNjYWNxbXN2bXZtdGV3cmxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzE3NjAsImV4cCI6MjEwMjgwNzc2MH0.uf30y8ce13VoIUTB1eyfurxellJa0sShsXeb335AnQI'; // <-- paste your eyJ... key here
 
 let db;
 try {
@@ -41,11 +39,11 @@ const app = {
 
     async init() {
         if (!db) {
-            showPageError('Supabase not initialized. Set the legacy key in script.js line 5.');
+            showPageError('Supabase not initialized.');
             return;
         }
-        if (SUPABASE_ANON_KEY === 'PUT_YOUR_LEGACY_ANON_KEY_HERE') {
-            showPageError('You need to replace PUT_YOUR_LEGACY_ANON_KEY_HERE on line 5 with your actual eyJ... key.');
+        if (SUPABASE_ANON_KEY === '<USER_LEGACY_KEY>') {
+            showPageError('Replace <USER_LEGACY_KEY> on line 4 with your actual eyJ... key.');
             return;
         }
         this.setupEventListeners();
@@ -81,7 +79,7 @@ const app = {
         if (el) el.style.display = 'none';
     },
 
-    // ============== EVENT SETUP ==============
+    // ============ EVENT SETUP ============
     setupEventListeners() {
         const self = this;
 
@@ -148,7 +146,7 @@ const app = {
             self.renderAdminView();
         };
 
-        // PPE/CONSUMABLES toggle on both forms
+        // PPE / CONSUMABLES toggle
         document.querySelectorAll('.toggle-btn').forEach(btn => {
             btn.onclick = () => {
                 const formEl = btn.closest('form');
@@ -156,22 +154,25 @@ const app = {
                 btn.classList.add('active');
                 const itemSel = formEl.querySelector('select[id$="item-select"]');
                 if (itemSel) self.filterItemsByCategory(itemSel);
+                self.refreshStockHint();
             };
         });
 
-        // Item dropdown - show/hide Other input
+        // Show/hide Other input
         document.getElementById('item-select').onchange = (e) => {
             document.getElementById('other-item-container').classList.toggle('hidden', e.target.value !== 'Other');
+            self.refreshStockHint();
         };
         document.getElementById('arrival-item-select').onchange = (e) => {
             document.getElementById('arrival-other-item-container').classList.toggle('hidden', e.target.value !== 'Other');
         };
 
-        // Add Employee forms
-        document.querySelectorAll('form[id^="add-employee"]').forEach(form => {
-            form.onsubmit = async function (e) {
+        // Add Employee form (issue page only — arrival page has no employees)
+        const empForm = document.getElementById('add-employee');
+        if (empForm) {
+            empForm.onsubmit = async function (e) {
                 e.preventDefault();
-                const nameInput = form.querySelector('input');
+                const nameInput = empForm.querySelector('input');
                 const name = nameInput.value.trim();
                 if (!name) return;
 
@@ -190,11 +191,12 @@ const app = {
                 await self.loadEmployees();
                 self.renderSidePanels();
             };
-        });
+        }
 
         // Remove employee
-        document.querySelectorAll('[id^="employee-list"]').forEach(ul => {
-            ul.addEventListener('click', async function (e) {
+        const empList = document.getElementById('employee-list');
+        if (empList) {
+            empList.addEventListener('click', async function (e) {
                 if (e.target.classList.contains('remove-emp')) {
                     const id = e.target.dataset.id;
                     if (!confirm('Remove this employee?')) return;
@@ -203,7 +205,13 @@ const app = {
                     self.renderSidePanels();
                 }
             });
-        });
+        }
+
+        // Live-update stock hint on the issue page when amount / item changes
+        const issuedAmtInput = document.getElementById('amount-issued');
+        if (issuedAmtInput) {
+            issuedAmtInput.addEventListener('input', () => self.refreshStockHint());
+        }
 
         // Issue form submit
         document.getElementById('movement-form').onsubmit = function (e) {
@@ -222,6 +230,17 @@ const app = {
             document.getElementById('confirm-modal').style.display = 'none';
         };
         document.getElementById('btn-confirm').onclick = () => self.submitMovement();
+
+        // Warning modal buttons
+        document.getElementById('btn-warn-cancel').onclick = () => {
+            document.getElementById('warning-modal').style.display = 'none';
+        };
+        document.getElementById('btn-warn-force').onclick = () => {
+            document.getElementById('warning-modal').style.display = 'none';
+            // Bypass check and submit anyway
+            self._forceSubmitOnWarning = true;
+            self.submitMovement();
+        };
     },
 
     filterItemsByCategory(selectEl) {
@@ -238,7 +257,7 @@ const app = {
         selectEl.dispatchEvent(new Event('change'));
     },
 
-    // ============== VIEW SWITCHING ==============
+    // ============ VIEW SWITCHING ============
     hideAllViews() {
         ['login-view', 'admin-view', 'hub-view', 'leader-view', 'arrival-view'].forEach(id => {
             document.getElementById(id).classList.add('hidden');
@@ -264,6 +283,7 @@ const app = {
         this.renderSidePanels();
         this.setActiveToggle('movement-form', 'PPE');
         this.filterItemsByCategory(document.getElementById('item-select'));
+        this.refreshStockHint();
     },
 
     async showArrivalPage() {
@@ -271,9 +291,7 @@ const app = {
         document.getElementById('arrival-view').classList.remove('hidden');
         document.getElementById('arrival-title').textContent = `${this.currentUser.subsection} — ARRIVING STOCK`;
         document.getElementById('arrival-display-name').textContent = this.currentUser.name;
-        await this.loadEmployees();
         await this.loadEntries();
-        this.renderSidePanels();
         this.setActiveToggle('arrival-form', 'PPE');
         this.filterItemsByCategory(document.getElementById('arrival-item-select'));
     },
@@ -284,7 +302,7 @@ const app = {
         if (target) target.classList.add('active');
     },
 
-    // ============== LOGIN / LOGOUT ==============
+    // ============ LOGIN / LOGOUT ============
     async login(user) {
         try {
             this.currentUser = user;
@@ -314,7 +332,7 @@ const app = {
         document.getElementById('login-form').reset();
     },
 
-    // ============== DATA LOADERS ==============
+    // ============ DATA LOADERS ============
     async loadUsers() {
         const { data } = await db.from('users').select('*').eq('role', 'leader').order('created_at', { ascending: true });
         this.users = data || [];
@@ -337,7 +355,7 @@ const app = {
         this.renderAdminView();
     },
 
-    // ============== ADMIN VIEW ==============
+    // ============ ADMIN VIEW ============
     renderAdminView() {
         this.hideAllViews();
         document.getElementById('admin-view').classList.remove('hidden');
@@ -354,7 +372,7 @@ const app = {
         });
     },
 
-    // ============== SIDE PANELS ==============
+    // ============ SIDEBAR (issue page only) ============
     renderSidePanels() {
         if (!this.currentUser) return;
         const subEmployees = this.employees.filter(e => e.subsection === this.currentUser.subsection);
@@ -363,10 +381,8 @@ const app = {
             ? subEmployees.map(e => `<option value="${e.name}">${e.name}</option>`).join('')
             : '<option value="">No employees added yet</option>';
 
-        ['allocate-employee', 'arrival-allocate-employee'].forEach(id => {
-            const sel = document.getElementById(id);
-            if (sel) sel.innerHTML = empOptsHtml;
-        });
+        const sel = document.getElementById('allocate-employee');
+        if (sel) sel.innerHTML = empOptsHtml;
 
         const empListHtml = subEmployees.length
             ? subEmployees.map(e => `
@@ -377,10 +393,8 @@ const app = {
             `).join('')
             : '<li>No employees added yet.</li>';
 
-        ['employee-list', 'employee-list-arrival'].forEach(id => {
-            const ul = document.getElementById(id);
-            if (ul) ul.innerHTML = empListHtml;
-        });
+        const ul = document.getElementById('employee-list');
+        if (ul) ul.innerHTML = empListHtml;
 
         const subEntries = this.entries
             .filter(e => e.subsection === this.currentUser.subsection)
@@ -395,7 +409,7 @@ const app = {
                 return `
                     <div style="border-bottom:1px solid var(--border-color);padding:0.5rem 0;">
                         <div style="display:flex;justify-content:space-between;font-weight:600;">
-                            <span>${e.item} → ${e.employee}</span>
+                            <span>${e.item} → ${e.employee || '(incoming)'}</span>
                             ${action}
                         </div>
                         <div style="font-size:0.75rem;color:#94a3b8;">${(e.type || '').toLowerCase()} · ${new Date(e.created_at).toLocaleString()}</div>
@@ -404,26 +418,72 @@ const app = {
             }).join('')
             : 'No entries yet.';
 
-        ['recent-entries', 'recent-entries-arrival'].forEach(id => {
-            const div = document.getElementById(id);
-            if (div) div.innerHTML = recentHtml;
-        });
+        const recentEl = document.getElementById('recent-entries');
+        if (recentEl) recentEl.innerHTML = recentHtml;
     },
 
-    // ============== FORM SUBMISSIONS ==============
+    // ============ STOCK LEVEL HELPERS ============
+    // Computes total usable stock for an item across ALL departments:
+    // sum(received from arrivals) - sum(issued)
+    computeUsableStock(itemName) {
+        let received = 0, issued = 0;
+        for (const e of this.entries) {
+            if (e.item !== itemName) continue;
+            received += (e.received || 0);
+            issued += (e.issued || 0);
+        }
+        return received - issued;
+    },
+
+    refreshStockHint() {
+        const hintEl = document.getElementById('stock-hint');
+        if (!hintEl) return;
+        const itemSel = document.getElementById('item-select');
+        const otherInput = document.getElementById('other-item-text');
+        if (!itemSel || itemSel.value === 'Other') {
+            hintEl.innerHTML = '&nbsp;';
+            return;
+        }
+        const item = itemSel.value;
+        const stock = this.computeUsableStock(item);
+        const colour = stock >= 0 ? '#22c55e' : '#ef4444';
+        hintEl.innerHTML = `Current usable stock across all departments: <strong style="color:${colour}">${stock}</strong>`;
+    },
+
+    // ============ FORM SUBMISSIONS ============
     showConfirmModal(kind) {
         const data = this._getFormData(kind);
         if (!data) return;
 
-        if (!data.employee) return alert('Please select an employee.');
-        if (!data.amount || data.amount <= 0) return alert('Please enter an amount greater than 0.');
+        if (kind === 'issue') {
+            if (!data.employee) return alert('Please select an employee.');
+            if (!data.amount || data.amount <= 0) return alert('Please enter an amount greater than 0.');
 
-        const verb = kind === 'issue' ? 'Issued' : 'Received';
+            // Check over-issuing — only when typeof=CONSUMABLES (per requirement)
+            if (data.type === 'CONSUMABLES') {
+                const stock = this.computeUsableStock(data.item);
+                if (data.amount > Math.max(0, stock)) {
+                    // Show warning — let user decide
+                    document.getElementById('warning-details').innerHTML = `
+                        You are issuing <strong>${data.amount}</strong> of <strong>${data.item}</strong>, but
+                        only <strong>${Math.max(0, stock)}</strong> is currently showing as usable stock
+                        across all departments.
+                        <br><br>
+                        Continuing will result in a negative stock level for this item.
+                    `;
+                    document.getElementById('warning-modal').style.display = 'flex';
+                    return;
+                }
+            }
+        } else if (kind === 'arrival') {
+            if (!data.amount || data.amount <= 0) return alert('Please enter an amount greater than 0.');
+        }
+
         document.getElementById('confirm-details').innerHTML = `
             Type: ${data.type}<br>
             Item: ${data.item}<br>
-            Employee: ${data.employee}<br>
-            ${verb}: ${data.amount}<br>
+            ${data.employee ? 'Employee: ' + data.employee + '<br>' : ''}
+            ${kind === 'issue' ? 'Issued' : 'Received'}: ${data.amount}<br>
             Notes: ${data.notes || '(none)'}
         `;
         document.getElementById('confirm-modal').dataset.kind = kind;
@@ -449,7 +509,7 @@ const app = {
         return {
             type,
             item,
-            employee: empSel.value,
+            employee: empSel ? empSel.value : '',
             amount: parseInt(amountInput.value || '0'),
             notes: (notesInput.value || '').trim()
         };
@@ -466,14 +526,18 @@ const app = {
             leader_name: this.currentUser.name,
             type: data.type,
             item: data.item,
-            employee: data.employee,
+            employee: data.employee || null,
             issued: kind === 'issue' ? data.amount : 0,
             received: kind === 'arrival' ? data.amount : 0,
             notes: data.notes
         };
 
-        const { error } = await db.from('stock_entries').insert([insertRow]);
+        const forceFlag = this._forceSubmitOnWarning === true;
+        this._forceSubmitOnWarning = false;
 
+        // Re-check over-issue warning if user clicked "Submit Anyway" without seeing it again? Already shown — bypass.
+
+        const { error } = await db.from('stock_entries').insert([insertRow]);
         if (error) return alert('Save failed: ' + error.message);
 
         document.getElementById('confirm-modal').style.display = 'none';
@@ -489,21 +553,26 @@ const app = {
         this.showHub();
     },
 
-    // ============== EXCEL EXPORT ==============
+    // ============ EXCEL EXPORT ============
     async exportData() {
         await this.loadEntries();
         if (this.entries.length === 0) return alert('No data to export.');
 
         const sortedEntries = [...this.entries].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        const totals = {};
 
-        let tableRows = '';
+        // Table 1: per-(department,item) running totals (unchanged)
+        const totalsByDept = {};
         sortedEntries.forEach(e => {
-            const key = `${e.subsection}-${e.item}`;
-            totals[key] = (totals[key] || 0) + (e.received - e.issued);
+            const deptKey = `${e.subsection}-${e.item}`;
+            totalsByDept[deptKey] = (totalsByDept[deptKey] || 0) + (e.received - e.issued);
+        });
+
+        let movementRows = '';
+        sortedEntries.forEach(e => {
+            const deptKey = `${e.subsection}-${e.item}`;
             const direction = e.received > 0 ? 'Received' : 'Issued';
             const amt = e.received > 0 ? e.received : e.issued;
-            tableRows += `
+            movementRows += `
                 <tr>
                     <td>${e.subsection}</td>
                     <td>${new Date(e.created_at).toLocaleString()}</td>
@@ -511,12 +580,28 @@ const app = {
                     <td>${e.type || ''}</td>
                     <td>${direction}</td>
                     <td>${e.leader_name}</td>
-                    <td>${e.employee}</td>
+                    <td>${e.employee || ''}</td>
                     <td style="text-align:right;">${amt}</td>
-                    <td style="text-align:right;font-weight:bold;">${totals[key]}</td>
+                    <td style="text-align:right;font-weight:bold;">${totalsByDept[deptKey]}</td>
                     <td>${e.notes || ''}</td>
-                </tr>
-            `;
+                </tr>`;
+        });
+
+        // Table 2: usable stock per item across all departments (Received - Issued)
+        const stockByItem = {};
+        sortedEntries.forEach(e => {
+            stockByItem[e.item] = (stockByItem[e.item] || 0) + (e.received - e.issued);
+        });
+
+        const sortedItems = Object.entries(stockByItem).sort((a, b) => a[0].localeCompare(b[0]));
+        let stockRows = '';
+        sortedItems.forEach(([item, total]) => {
+            const styleCol = total >= 0 ? 'color:#22c55e' : 'color:#ef4444';
+            stockRows += `
+                <tr>
+                    <td>${item}</td>
+                    <td style="text-align:right;font-weight:bold;${styleCol};">${total}</td>
+                </tr>`;
         });
 
         const html = `
@@ -524,24 +609,33 @@ const app = {
             <head>
                 <meta charset="UTF-8">
                 <style>
-                    table { border-collapse: collapse; font-family: Arial, sans-serif; }
+                    body { font-family: Arial, sans-serif; }
+                    table { border-collapse: collapse; margin-bottom: 30px; }
                     thead tr { background-color: #f97316; color: white; }
                     th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
                     th { font-weight: bold; text-transform: uppercase; font-size: 12px; }
                     td { font-size: 12px; }
                     tr:nth-child(even) { background-color: #f8f8f8; }
-                    .title { font-size: 18px; font-weight: bold; margin-bottom: 10px; font-family: Arial; }
+                    .title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+                    .section { font-size: 16px; font-weight: bold; margin: 25px 0 8px 0; color: #0f172a; }
                 </style>
             </head>
             <body>
                 <div class="title">Stock Tracking Report — ${new Date().toLocaleDateString()}</div>
+                <div class="section">1. Stock Movements</div>
                 <table>
                     <thead><tr>
                         <th>Department</th><th>Date</th><th>Item</th><th>Type</th>
                         <th>Direction</th><th>Team Leader</th><th>Allocated To</th>
                         <th>Quantity</th><th>Running Total</th><th>Notes</th>
                     </tr></thead>
-                    <tbody>${tableRows}</tbody>
+                    <tbody>${movementRows}</tbody>
+                </table>
+
+                <div class="section">2. Stock Levels (Usable stock = Arrival Received − Issued, all departments)</div>
+                <table>
+                    <thead><tr><th>Item</th><th>Current Usable Stock</th></tr></thead>
+                    <tbody>${stockRows}</tbody>
                 </table>
             </body>
             </html>
