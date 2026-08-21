@@ -85,6 +85,21 @@
                             Export all stock movements to a formatted Excel file.
                         </p>
                         <button onclick="app.exportData()">DOWNLOAD EXCEL SHEET</button>
+
+                        <hr style="margin: 1.5rem 0; border: none; border-top: 1px solid var(--border-color);">
+
+                        <p style="color: var(--danger-color); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; margin-bottom: 0.5rem;">
+                            ⚠️ Danger Zone
+                        </p>
+                        <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.75rem;">
+                            Permanently delete <strong>all stock data</strong>. Requires two-step verification. Cannot be undone.
+                        </p>
+                        <button id="btn-clear-data" onclick="app.clearStockData()" style="background-color: var(--danger-color);">
+                            CLEAR ALL STOCK DATA
+                        </button>
+                        <p id="clear-data-info" style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            &nbsp;
+                        </p>
                     </div>
                 </div>
             </div>
@@ -331,9 +346,40 @@
             </div>
         </div>
 
+        <!-- =========== CLEAR DATA MODALS (two-step verification) =========== -->
+        <div id="clear-warning-modal" class="modal">
+            <div class="modal-content" style="border: 2px solid var(--danger-color);">
+                <h2 style="margin-bottom: 1rem; color: var(--danger-color);">⚠️ Clear All Stock Data</h2>
+                <p id="clear-warning-details"></p>
+                <p style="margin-top: 1rem; font-weight: 600;">This action is permanent and cannot be undone.</p>
+                <div class="modal-actions">
+                    <button id="btn-clear-cancel-1" class="secondary">Cancel</button>
+                    <button id="btn-clear-continue" style="background-color: var(--danger-color);">I understand, continue</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="clear-confirm-modal" class="modal">
+            <div class="modal-content" style="border: 2px solid var(--danger-color);">
+                <h2 style="margin-bottom: 1rem; color: var(--danger-color);">🔒 Final Verification</h2>
+                <p style="margin-bottom: 1rem;">To confirm, type the word <strong style="font-family:monospace;background:rgba(255,255,255,0.1);padding:0.1rem 0.4rem;border-radius:0.25rem;">CLEAR</strong> exactly:</p>
+                <div class="form-group">
+                    <input type="text" id="clear-typed-confirmation" placeholder="Type CLEAR to confirm" autocomplete="off">
+                    <p id="clear-typed-error" style="color: var(--danger-color); font-size: 0.75rem; margin-top: 0.5rem; display: none;">
+                        You must type CLEAR exactly (in capital letters) to proceed.
+                    </p>
+                </div>
+                <div class="modal-actions">
+                    <button id="btn-clear-cancel-2" class="secondary">Cancel</button>
+                    <button id="btn-clear-execute" style="background-color: var(--danger-color);" disabled>Permanently Delete All Data</button>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="script.js"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2e8355ef8a093d0',t:'MTc4NzMwMDMyMQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2e84919a91ff4f0',t:'MTc4NzMwMTEyOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
+
