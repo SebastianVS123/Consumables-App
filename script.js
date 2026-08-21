@@ -1,5 +1,5 @@
 // ============== SUPABASE CONFIG ==============
-const SUPABASE_URL = 'https://okbscacqmsvmvmtewrlh.supabase.co';
+const SUPABASE_URL = 'https://okbscacqmsvmvmtewrlh.supabase.co/rest/v1/';
 const SUPABASE_ANON_KEY = 'sb_publishable_g0Xk99hRIBJEkovLLRxaig_57-3ibRH';
 
 // Initialize Supabase client (loaded from CDN as a global)
