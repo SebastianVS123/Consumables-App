@@ -8,7 +8,8 @@
 </head>
 <body>
     <div id="app">
-        <!-- Login View -->
+
+        <!-- =========== LOGIN VIEW =========== -->
         <div id="login-view" class="login-container">
             <div class="login-card">
                 <h1>STOCK REGISTER</h1>
@@ -23,13 +24,11 @@
                     </div>
                     <button type="submit">SIGN IN</button>
                 </form>
-                <div id="login-error" class="error-msg" style="color: var(--danger-color); margin-top: 1rem; text-align: center; font-size: 0.875rem; display: none;">
-                    Invalid username or password
-                </div>
+                <div id="login-error" class="error-msg" style="display: none;">&nbsp;</div>
             </div>
         </div>
 
-        <!-- Admin View -->
+        <!-- =========== ADMIN VIEW =========== -->
         <div id="admin-view" class="container hidden">
             <header>
                 <div class="header-info">
@@ -38,7 +37,6 @@
                 </div>
                 <button onclick="app.logout()" class="secondary" style="width: auto;">SIGN OUT</button>
             </header>
-
             <div class="dashboard-grid">
                 <div>
                     <div class="card">
@@ -70,29 +68,21 @@
                             <button type="submit">ADD TEAM LEADER</button>
                         </form>
                     </div>
-
                     <div class="card">
                         <h2 class="card-title">Registered Team Leaders</h2>
                         <div class="admin-table-container">
                             <table id="leaders-table">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Subsection</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
+                                <thead><tr><th>Name</th><th>Subsection</th><th>Actions</th></tr></thead>
                                 <tbody></tbody>
                             </table>
                         </div>
                     </div>
                 </div>
-
                 <div>
                     <div class="card">
                         <h2 class="card-title">Reports</h2>
                         <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1rem;">
-                            Export all stock movements to Excel (CSV).
+                            Export all stock movements to a formatted Excel file.
                         </p>
                         <button onclick="app.exportData()">DOWNLOAD EXCEL SHEET</button>
                     </div>
@@ -100,21 +90,54 @@
             </div>
         </div>
 
-        <!-- Team Leader View -->
-        <div id="leader-view" class="container hidden">
+        <!-- =========== HUB VIEW (Team leader entry point) =========== -->
+        <div id="hub-view" class="container hidden">
             <header>
                 <div class="header-info">
-                    <h1 id="view-title">MANAGEMENT SUBSECTION</h1>
-                    <p>Team leader: <span id="leader-display-name">sebastian</span></p>
+                    <h1 id="hub-title">SUBSECTION</h1>
+                    <p>Team leader: <span id="hub-leader-name">—</span></p>
                 </div>
                 <button onclick="app.logout()" class="secondary" style="width: auto;">SIGN OUT</button>
             </header>
 
+            <div class="hub-grid">
+                <div class="card hub-card" onclick="app.showIssuePage()">
+                    <div class="hub-icon">📤</div>
+                    <h2 class="card-title">Issue Consumables or PPE</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem;">
+                        Record stock that is being given out to an employee on your shift.
+                    </p>
+                    <button type="button" style="margin-top:1rem;">ISSUE STOCK</button>
+                </div>
+
+                <div class="card hub-card" onclick="app.showArrivalPage()">
+                    <div class="hub-icon">📥</div>
+                    <h2 class="card-title">Log Arriving Stock</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem;">
+                        Record stock that arrived from procurement or another department.
+                    </p>
+                    <button type="button" style="margin-top:1rem;">LOG ARRIVAL</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== ISSUE STOCK VIEW =========== -->
+        <div id="leader-view" class="container hidden">
+            <header>
+                <div class="header-info">
+                    <h1 id="view-title">SUBSECTION</h1>
+                    <p>Team leader: <span id="leader-display-name">—</span></p>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                    <button onclick="app.showHub()" class="secondary" style="width:auto;">← HUB</button>
+                    <button onclick="app.logout()" class="secondary" style="width:auto;">SIGN OUT</button>
+                </div>
+            </header>
+
             <div class="dashboard-grid">
-                <!-- Left Column -->
                 <div class="main-form">
                     <div class="card">
-                        <h2 class="card-title">New Stock Movement</h2>
+                        <h2 class="card-title">📤 Issue Stock</h2>
                         <form id="movement-form">
                             <div class="form-group">
                                 <label>ALLOCATE TO EMPLOYEE</label>
@@ -137,10 +160,16 @@
                             <div class="form-group">
                                 <label>ITEM</label>
                                 <select id="item-select" required>
-                                    <option value="Gloves">Gloves</option>
-                                    <option value="Markers">Markers</option>
-                                    <option value="Cloths">Cloths</option>
-                                    <option value="Other">Other</option>
+                                    <option value="Shirts" data-category="PPE">Shirts</option>
+                                    <option value="Pants" data-category="PPE">Pants</option>
+                                    <option value="Reflectors" data-category="PPE">Reflectors</option>
+                                    <option value="Hard Hats" data-category="PPE">Hard Hats</option>
+                                    <option value="Boots" data-category="PPE">Boots</option>
+                                    <option value="Paint Suits" data-category="PPE">Paint Suits</option>
+                                    <option value="Gloves" data-category="CONSUMABLES">Gloves</option>
+                                    <option value="Markers" data-category="CONSUMABLES">Markers</option>
+                                    <option value="Cloths" data-category="CONSUMABLES">Cloths</option>
+                                    <option value="Other" data-category="GENERAL">Other</option>
                                 </select>
                             </div>
 
@@ -149,26 +178,14 @@
                                 <input type="text" id="other-item-text">
                             </div>
 
-                            <div class="amount-grid">
-                                <div class="card" style="padding: 1rem; margin-bottom: 0;">
-                                    <div class="checkbox-group">
-                                        <input type="checkbox" id="check-issued">
-                                        <label for="check-issued">Amount Issued</label>
-                                    </div>
-                                    <input type="number" id="amount-issued" value="0" min="0">
-                                </div>
-                                <div class="card" style="padding: 1rem; margin-bottom: 0;">
-                                    <div class="checkbox-group">
-                                        <input type="checkbox" id="check-received">
-                                        <label for="check-received">Amount Received</label>
-                                    </div>
-                                    <input type="number" id="amount-received" value="0" min="0">
-                                </div>
+                            <div class="form-group">
+                                <label>AMOUNT ISSUED</label>
+                                <input type="number" id="amount-issued" value="0" min="0">
                             </div>
 
-                            <div class="form-group" style="margin-top: 1.5rem;">
+                            <div class="form-group">
                                 <label>NOTES (OPTIONAL)</label>
-                                <textarea id="notes" placeholder="Who received it, job number..." rows="2"></textarea>
+                                <textarea id="notes" placeholder="Job number, reason…" rows="2"></textarea>
                             </div>
 
                             <button type="submit">SUBMIT</button>
@@ -176,15 +193,14 @@
                     </div>
                 </div>
 
-                <!-- Right Column -->
                 <div class="side-panels">
                     <div class="card">
                         <h2 class="card-title">My Shift Employees</h2>
                         <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem;">
-                            The people you are responsible for. Every movement is allocated to one of them.
+                            Add the people on your shift. Every movement must be allocated to one of them.
                         </p>
-                        <form id="add-employee-form" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-                            <input type="text" id="employee-name" placeholder="Employee full name" required>
+                        <form id="add-employee" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                            <input type="text" placeholder="Employee full name" required>
                             <button type="submit" style="width: auto; padding: 0.5rem 1rem;">ADD</button>
                         </form>
                         <ul id="employee-list" style="list-style: none; font-size: 0.875rem; color: var(--text-secondary);">
@@ -202,7 +218,104 @@
             </div>
         </div>
 
-        <!-- Confirmation Modal -->
+        <!-- =========== ARRIVAL VIEW =========== -->
+        <div id="arrival-view" class="container hidden">
+            <header>
+                <div class="header-info">
+                    <h1 id="arrival-title">SUBSECTION</h1>
+                    <p>Team leader: <span id="arrival-display-name">—</span></p>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                    <button onclick="app.showHub()" class="secondary" style="width:auto;">← HUB</button>
+                    <button onclick="app.logout()" class="secondary" style="width:auto;">SIGN OUT</button>
+                </div>
+            </header>
+
+            <div class="dashboard-grid">
+                <div class="main-form">
+                    <div class="card">
+                        <h2 class="card-title">📥 Log Arriving Stock</h2>
+                        <form id="arrival-form">
+                            <div class="form-group">
+                                <label>ALLOCATE TO EMPLOYEE</label>
+                                <select id="arrival-allocate-employee" required>
+                                    <option value="">No employees added yet</option>
+                                </select>
+                                <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                                    Tag the employee who received / signed for this arrival.
+                                </p>
+                            </div>
+
+                            <div class="form-group">
+                                <label>WHAT IS ARRIVING?</label>
+                                <div class="toggle-group">
+                                    <button type="button" class="toggle-btn active" data-type="PPE">PPE</button>
+                                    <button type="button" class="toggle-btn" data-type="CONSUMABLES">CONSUMABLES</button>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>ITEM</label>
+                                <select id="arrival-item-select" required>
+                                    <option value="Shirts" data-category="PPE">Shirts</option>
+                                    <option value="Pants" data-category="PPE">Pants</option>
+                                    <option value="Reflectors" data-category="PPE">Reflectors</option>
+                                    <option value="Hard Hats" data-category="PPE">Hard Hats</option>
+                                    <option value="Boots" data-category="PPE">Boots</option>
+                                    <option value="Paint Suits" data-category="PPE">Paint Suits</option>
+                                    <option value="Gloves" data-category="CONSUMABLES">Gloves</option>
+                                    <option value="Markers" data-category="CONSUMABLES">Markers</option>
+                                    <option value="Cloths" data-category="CONSUMABLES">Cloths</option>
+                                    <option value="Other" data-category="GENERAL">Other</option>
+                                </select>
+                            </div>
+
+                            <div id="arrival-other-item-container" class="form-group hidden">
+                                <label>SPECIFY OTHER ITEM</label>
+                                <input type="text" id="arrival-other-item-text">
+                            </div>
+
+                            <div class="form-group">
+                                <label>AMOUNT RECEIVED</label>
+                                <input type="number" id="amount-received" value="0" min="0">
+                            </div>
+
+                            <div class="form-group">
+                                <label>NOTES (OPTIONAL) — Supplier, waybill number…</label>
+                                <textarea id="arrival-notes" placeholder="Supplier, waybill number…" rows="2"></textarea>
+                            </div>
+
+                            <button type="submit">SUBMIT ARRIVAL</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="side-panels">
+                    <div class="card">
+                        <h2 class="card-title">My Shift Employees</h2>
+                        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                            Add the people on your shift. Every movement must be allocated to one of them.
+                        </p>
+                        <form id="add-employee-arrival" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                            <input type="text" placeholder="Employee full name" required>
+                            <button type="submit" style="width: auto; padding: 0.5rem 1rem;">ADD</button>
+                        </form>
+                        <ul id="employee-list-arrival" style="list-style: none; font-size: 0.875rem; color: var(--text-secondary);">
+                            <li>No employees added yet.</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <h2 class="card-title">Your Recent Entries</h2>
+                        <div id="recent-entries-arrival" style="font-size: 0.875rem; color: var(--text-secondary);">
+                            No entries yet.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== CONFIRMATION MODAL =========== -->
         <div id="confirm-modal" class="modal">
             <div class="modal-content">
                 <h2 style="margin-bottom: 1rem;">Confirm Submission</h2>
@@ -214,10 +327,10 @@
                 </div>
             </div>
         </div>
+
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="script.js"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2e225ee694ec479',t:'MTc4NzIzNjc3NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f"}' crossorigin="anonymous"></script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2e7d09c7bc255b9',t:'MTc4NzI5NjE5Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
