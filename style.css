@@ -243,6 +243,32 @@ th {
 /* Utilities */
 .hidden { display: none; }
 
+/* Hub view: two big action cards */
+.hub-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+    max-width: 900px;
+}
+
+.hub-card {
+    cursor: pointer;
+    text-align: center;
+    transition: transform 0.2s, border-color 0.2s;
+    border: 2px solid transparent;
+}
+
+.hub-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent-color);
+}
+
+.hub-icon {
+    font-size: 3rem;
+    margin-bottom: 0.5rem;
+}
+
 /* Mobile Responsive */
 @media (max-width: 900px) {
     .container {
