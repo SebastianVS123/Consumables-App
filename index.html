@@ -307,7 +307,7 @@
             </div>
         </div>
 
-        <!-- =========== WARNING MODAL (over-issue) =========== -->
+        <!-- =========== WARNING MODAL (over-usable-stock) =========== -->
         <div id="warning-modal" class="modal">
             <div class="modal-content" style="border: 2px solid var(--danger-color);">
                 <h2 style="margin-bottom: 1rem; color: var(--danger-color);">⚠️ Warning: Stock Issue</h2>
@@ -319,9 +319,37 @@
             </div>
         </div>
 
+        <!-- =========== AUDIT WARNING MODAL (issued > received) =========== -->
+        <div id="audit-warning-modal" class="modal">
+            <div class="modal-content" style="border: 2px solid var(--danger-color);">
+                <h2 style="margin-bottom: 1rem; color: var(--danger-color);">⚠️ Audit Warning</h2>
+                <p id="audit-warning-details"></p>
+                <div class="modal-actions">
+                    <button id="btn-audit-cancel" class="secondary">Cancel</button>
+                    <button id="btn-audit-continue" style="background-color: var(--danger-color);">I am aware, override</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== OVERRIDE REASON MODAL =========== -->
+        <div id="override-modal" class="modal">
+            <div class="modal-content" style="border: 2px solid var(--danger-color);">
+                <h2 style="margin-bottom: 1rem; color: var(--danger-color);">📝 Override Reason Required</h2>
+                <p style="margin-bottom: 1rem;">You are issuing more consumables than what you received back from the employee. Please provide a reason why you are issuing more than you are receiving.</p>
+                <div class="form-group">
+                    <label>REASON FOR OVERRIDE (REQUIRED)</label>
+                    <textarea id="override-reason" rows="3" placeholder="e.g. New employee has no prior issued stock, damaged stock previously reported, etc."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button id="btn-override-cancel" class="secondary">Cancel</button>
+                    <button id="btn-override-submit" style="background-color: var(--danger-color);">Submit with Override</button>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="script.js"></script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2e82183ceffb169',t:'MTc4NzI5OTUwNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
