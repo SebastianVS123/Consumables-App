@@ -2,6 +2,38 @@
 const SUPABASE_URL = 'https://okbscacqmsvmvmtewrlh.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rYnNjYWNxbXN2bXZtdGV3cmxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzE3NjAsImV4cCI6MjEwMjgwNzc2MH0.uf30y8ce13VoIUTB1eyfurxellJa0sShsXeb335AnQI'; // <-- paste your eyJ... key here
 
+// ============== ITEM CATALOG ==============
+// Single source of truth for items + their categories. Used to dynamically
+// build the ITEM dropdown on both Issue and Arrival pages. Note: we can't
+// rely on `option.style.display = 'none'` to hide <option> elements — Chrome
+// and Safari ignore CSS display on options. We rebuild the dropdown instead.
+const ITEM_CATALOG = [
+    { value: 'Shirts',      label: 'Shirts',      category: 'PPE' },
+    { value: 'Pants',       label: 'Pants',       category: 'PPE' },
+    { value: 'Reflectors',  label: 'Reflectors',  category: 'PPE' },
+    { value: 'Hard Hats',   label: 'Hard Hats',   category: 'PPE' },
+    { value: 'Boots',       label: 'Boots',       category: 'PPE' },
+    { value: 'Paint Suits', label: 'Paint Suits', category: 'PPE' },
+    { value: 'Gloves',      label: 'Gloves',      category: 'CONSUMABLES' },
+    { value: 'Markers',     label: 'Markers',     category: 'CONSUMABLES' },
+    { value: 'Cloths',      label: 'Cloths',      category: 'CONSUMABLES' },
+    { value: 'Other',       label: 'Other',       category: 'BOTH' }
+];
+
+function populateItemDropdown(selectId, category) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const previousValue = sel.value;
+    const filtered = ITEM_CATALOG.filter(i => i.category === category || i.category === 'BOTH');
+    sel.innerHTML = filtered.map(i =>
+        `<option value="${i.value}">${i.label}</option>`
+    ).join('');
+    // Preserve the prior selection if it's still valid, otherwise pick the first.
+    if (filtered.some(i => i.value === previousValue)) {
+        sel.value = previousValue;
+    }
+}
+
 let db;
 try {
     db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -146,14 +178,15 @@ const app = {
             self.renderAdminView();
         };
 
-        // PPE / CONSUMABLES toggle
+        // PPE / CONSUMABLES toggle — rebuild the item dropdown based on category
         document.querySelectorAll('.toggle-btn').forEach(btn => {
             btn.onclick = () => {
                 const formEl = btn.closest('form');
                 formEl.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
+                const activeType = btn.dataset.type;
                 const itemSel = formEl.querySelector('select[id$="item-select"]');
-                if (itemSel) self.filterItemsByCategory(itemSel);
+                if (itemSel) populateItemDropdown(itemSel.id, activeType);
                 self.refreshStockHint();
             };
         });
@@ -323,7 +356,7 @@ const app = {
         await this.loadEntries();
         this.renderSidePanels();
         this.setActiveToggle('movement-form', 'PPE');
-        this.filterItemsByCategory(document.getElementById('item-select'));
+        populateItemDropdown('item-select', 'PPE');
         this.refreshStockHint();
     },
 
@@ -334,7 +367,7 @@ const app = {
         document.getElementById('arrival-display-name').textContent = this.currentUser.name;
         await this.loadEntries();
         this.setActiveToggle('arrival-form', 'PPE');
-        this.filterItemsByCategory(document.getElementById('arrival-item-select'));
+        populateItemDropdown('arrival-item-select', 'PPE');
     },
 
     setActiveToggle(formId, type) {
@@ -664,7 +697,10 @@ const app = {
         const otherContainerId = kind === 'issue' ? 'other-item-container' : 'arrival-other-item-container';
         document.getElementById(otherContainerId).classList.add('hidden');
         this.setActiveToggle(formId, 'PPE');
-        this.filterItemsByCategory(document.getElementById(kind === 'issue' ? 'item-select' : 'arrival-item-select'));
+        populateItemDropdown(
+            kind === 'issue' ? 'item-select' : 'arrival-item-select',
+            'PPE'
+        );
         if (kind === 'issue') this.refreshStockHint();
 
         await this.loadEntries();
