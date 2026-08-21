@@ -1,6 +1,427 @@
 // ============== SUPABASE CONFIG ==============
 const SUPABASE_URL = 'https://okbscacqmsvmvmtewrlh.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIU// ============== SUPABASE CONFIG ==============
+const SUPABASE_URL = 'https://okbscacqmsvmvmtewrlh.supabase.co';
+// IMPORTANT: This must be the LEGACY anon JWT key (starts with eyJ...)
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rYnNjYWNxbXN2bXZtdGV3cmxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzE3NjAsImV4cCI6MjEwMjgwNzc2MH0.uf30y8ce13VoIUTB1eyfurxellJa0sShsXeb335AnQI';
+
+// Initialize Supabase client
+let db;
+try {
+    db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log('Supabase client created OK');
+} catch (e) {
+    console.error('Supabase init failed:', e);
+}
+
+// ============== ON-SCREEN ERROR DISPLAY ==============
+// If anything goes wrong anywhere in this file, we'll show it on screen
+function showPageError(msg) {
+    let el = document.getElementById('page-error-banner');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'page-error-banner';
+        el.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ef4444;color:white;padding:12px 16px;font-size:14px;z-index:99999;font-family:monospace;white-space:pre-wrap;';
+        document.body.appendChild(el);
+    }
+    el.textContent = '⚠️ ' + msg;
+    console.error('PAGE ERROR:', msg);
+}
+
+window.addEventListener('error', (event) => {
+    showPageError('JS error: ' + event.message + (event.filename ? ' at ' + event.filename + ':' + event.lineno : ''));
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+    showPageError('Promise error: ' + (event.reason && event.reason.message ? event.reason.message : event.reason));
+});
+
+// ============== APP STATE ==============
+const app = {
+    currentUser: null,
+    employees: [],
+    entries: [],
+    users: [],
+
+    async init() {
+        if (!db) {
+            showPageError('Supabase client is not initialized. Check your keys in script.js line 4-5.');
+            return;
+        }
+        this.setupEventListeners();
+        const session = sessionStorage.getItem('current_user');
+        if (session) {
+            try {
+                this.currentUser = JSON.parse(session);
+                if (this.currentUser.role === 'admin') this.renderAdminView();
+                else this.renderLeaderView();
+            } catch (e) {
+                sessionStorage.removeItem('current_user');
+            }
+        }
+    },
+
+    showError(msg) {
+        const el = document.getElementById('login-error');
+        if (!el) return showPageError(msg);
+        el.textContent = msg;
+        el.style.display = 'block';
+        el.style.color = '#ef4444';
+        el.style.marginTop = '1rem';
+        el.style.textAlign = 'center';
+        el.style.fontSize = '0.85rem';
+        el.style.background = 'rgba(239,68,68,0.1)';
+        el.style.padding = '0.75rem';
+        el.style.borderRadius = '0.375rem';
+        console.error('LOGIN ERROR:', msg);
+    },
+
+    hideError() {
+        const el = document.getElementById('login-error');
+        if (el) el.style.display = 'none';
+    },
+
+    setupEventListeners() {
+        const self = this;
+
+        // LOGIN
+        document.getElementById('login-form').onsubmit = async function (e) {
+            e.preventDefault();
+            self.hideError();
+
+            const username = document.getElementById('login-username').value.trim().toLowerCase();
+            const password = document.getElementById('login-password').value;
+
+            if (!username || !password) {
+                self.showError('Please type both username and password.');
+                return;
+            }
+
+            try {
+                self.showError('Checking...');
+                document.getElementById('login-error').style.color = '#94a3b8';
+
+                const { data, error } = await db
+                    .from('users')
+                    .select('*')
+                    .eq('username', username)
+                    .eq('password', password)
+                    .maybeSingle(); // <-- maybeSingle doesn't error when 0 rows
+
+                self.hideError();
+
+                if (!data) {
+                    self.showError('No user with that username/password exists. (Did you run the SQL setup? Is the admin "Admin@1234" seeded?)');
+                    return;
+                }
+
+                if (error) {
+                    if (error.message && error.message.includes('relation')) {
+                        self.showError('TABLES DO NOT EXIST. Run the SQL setup in Supabase SQL Editor.');
+                    } else {
+                        self.showError('DB error: ' + error.message);
+                    }
+                    return;
+                }
+
+                await self.login(data);
+            } catch (err) {
+                self.hideError();
+                self.showError('Connection error: ' + err.message);
+            }
+        };
+
+        // ADMIN: Add Team Leader
+        document.getElementById('add-leader-form').onsubmit = async function (e) {
+            e.preventDefault();
+            const username = document.getElementById('leader-username').value.trim().toLowerCase();
+            const name = document.getElementById('leader-name').value;
+            const pass = document.getElementById('leader-pass').value;
+            const subsection = document.getElementById('leader-subsection').value;
+
+            const { error } = await db.from('users').insert([{
+                username, name, password: pass, role: 'leader', subsection
+            }]);
+
+            if (error) {
+                alert('Could not add user: ' + error.message);
+                return;
+            }
+            alert(`Team leader created!\nLogin: ${username} / ${pass}`);
+            e.target.reset();
+            await self.loadUsers();
+            self.renderAdminView();
+        };
+
+        // LEADER: Toggle PPE/Consumables
+        document.querySelectorAll('.toggle-btn').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            };
+        });
+
+        // LEADER: Show/hide "Other"
+        document.getElementById('item-select').onchange = (e) => {
+            document.getElementById('other-item-container').classList.toggle('hidden', e.target.value !== 'Other');
+        };
+
+        // LEADER: Add Employee
+        document.getElementById('add-employee-form').onsubmit = async function (e) {
+            e.preventDefault();
+            const name = document.getElementById('employee-name').value;
+            const { error } = await db.from('employees').insert([{
+                name,
+                subsection: self.currentUser.subsection,
+                leader_id: self.currentUser.id
+            }]);
+            if (error) return alert(error.message);
+            e.target.reset();
+            await self.loadEmployees();
+            self.renderLeaderView();
+        };
+
+        // Remove employee (event delegated)
+        document.getElementById('employee-list').addEventListener('click', async function (e) {
+            if (e.target.classList.contains('remove-emp')) {
+                const id = e.target.dataset.id;
+                if (!confirm('Remove this employee?')) return;
+                await db.from('employees').delete().eq('id', id);
+                await self.loadEmployees();
+                self.renderLeaderView();
+            }
+        });
+
+        document.getElementById('movement-form').onsubmit = function (e) {
+            e.preventDefault();
+            self.showConfirmModal();
+        };
+
+        document.getElementById('btn-cancel').onclick = () => {
+            document.getElementById('confirm-modal').style.display = 'none';
+        };
+        document.getElementById('btn-confirm').onclick = () => self.submitMovement();
+    },
+
+    async login(user) {
+        try {
+            this.currentUser = user;
+            sessionStorage.setItem('current_user', JSON.stringify(user));
+            document.getElementById('login-view').classList.add('hidden');
+            document.getElementById('login-error').style.display = 'none';
+
+            await this.loadEmployees();
+            await this.loadEntries();
+
+            if (user.role === 'admin') {
+                await this.loadUsers();
+                this.renderAdminView();
+            } else {
+                this.renderLeaderView();
+            }
+        } catch (err) {
+            showPageError('Login routine failed: ' + err.message);
+        }
+    },
+
+    async logout() {
+        this.currentUser = null;
+        sessionStorage.removeItem('current_user');
+        document.getElementById('admin-view').classList.add('hidden');
+        document.getElementById('leader-view').classList.add('hidden');
+        document.getElementById('login-view').classList.remove('hidden');
+        document.getElementById('login-form').reset();
+    },
+
+    async loadUsers() {
+        const { data } = await db.from('users').select('*').eq('role', 'leader').order('created_at', { ascending: true });
+        this.users = data || [];
+    },
+
+    async loadEmployees() {
+        const { data } = await db.from('employees').select('*');
+        this.employees = data || [];
+    },
+
+    async loadEntries() {
+        const { data } = await db.from('stock_entries').select('*');
+        this.entries = data || [];
+    },
+
+    async deleteUser(username) {
+        if (!confirm('Delete this team leader?')) return;
+        await db.from('users').delete().eq('username', username);
+        await this.loadUsers();
+        this.renderAdminView();
+    },
+
+    renderAdminView() {
+        document.getElementById('admin-view').classList.remove('hidden');
+        const tbody = document.querySelector('#leaders-table tbody');
+        tbody.innerHTML = '';
+        (this.users || []).forEach(u => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${u.name}</td>
+                <td>${u.subsection}</td>
+                <td><button onclick="app.deleteUser('${u.username}')" class="secondary" style="padding:0.25rem 0.5rem;font-size:0.75rem;">Delete</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    },
+
+    renderLeaderView() {
+        document.getElementById('leader-view').classList.remove('hidden');
+        document.getElementById('view-title').textContent = `${this.currentUser.subsection} SUBSECTION`;
+        document.getElementById('leader-display-name').textContent = this.currentUser.name;
+
+        const subEmployees = this.employees.filter(e => e.subsection === this.currentUser.subsection);
+
+        const select = document.getElementById('allocate-employee');
+        select.innerHTML = subEmployees.length
+            ? subEmployees.map(e => `<option value="${e.name}">${e.name}</option>`).join('')
+            : '<option value="">No employees added yet</option>';
+
+        const list = document.getElementById('employee-list');
+        list.innerHTML = subEmployees.length
+            ? subEmployees.map(e => `
+                <li style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+                    <span>• ${e.name}</span>
+                    <button class="remove-emp secondary" data-id="${e.id}" style="width:auto;padding:0.15rem 0.5rem;font-size:0.7rem;">Remove</button>
+                </li>
+            `).join('')
+            : '<li>No employees added yet.</li>';
+
+        const recent = document.getElementById('recent-entries');
+        const subEntries = this.entries
+            .filter(e => e.subsection === this.currentUser.subsection)
+            .slice(-5)
+            .reverse();
+        recent.innerHTML = subEntries.length
+            ? subEntries.map(e => `
+                <div style="border-bottom:1px solid var(--border-color);padding:0.5rem 0;">
+                    <div style="font-weight:600;">${e.item} → ${e.employee}</div>
+                    <div style="font-size:0.75rem;">Issued: ${e.issued} | Received: ${e.received} | ${new Date(e.created_at).toLocaleString()}</div>
+                </div>
+            `).join('')
+            : 'No entries yet.';
+    },
+
+    showConfirmModal() {
+        const item = document.getElementById('item-select').value === 'Other'
+            ? document.getElementById('other-item-text').value
+            : document.getElementById('item-select').value;
+        const employee = document.getElementById('allocate-employee').value;
+        const issued = document.getElementById('check-issued').checked ? document.getElementById('amount-issued').value : 0;
+        const received = document.getElementById('check-received').checked ? document.getElementById('amount-received').value : 0;
+
+        if (!employee) return alert('Please select an employee first.');
+
+        document.getElementById('confirm-details').innerHTML = `
+            Item: ${item}<br>
+            Employee: ${employee}<br>
+            Issued: ${issued}<br>
+            Received: ${received}
+        `;
+        document.getElementById('confirm-modal').style.display = 'flex';
+    },
+
+    async submitMovement() {
+        const type = document.querySelector('.toggle-btn.active').dataset.type;
+        const item = document.getElementById('item-select').value === 'Other'
+            ? document.getElementById('other-item-text').value
+            : document.getElementById('item-select').value;
+        const employee = document.getElementById('allocate-employee').value;
+        const issued = parseInt(document.getElementById('check-issued').checked ? document.getElementById('amount-issued').value : 0);
+        const received = parseInt(document.getElementById('check-received').checked ? document.getElementById('amount-received').value : 0);
+        const notes = document.getElementById('notes').value;
+
+        const { error } = await db.from('stock_entries').insert([{
+            subsection: this.currentUser.subsection,
+            leader_id: this.currentUser.id,
+            leader_name: this.currentUser.name,
+            type, item, employee, issued, received, notes
+        }]);
+
+        if (error) return alert('Save failed: ' + error.message);
+
+        document.getElementById('confirm-modal').style.display = 'none';
+        document.getElementById('movement-form').reset();
+        document.getElementById('other-item-container').classList.add('hidden');
+        document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('[data-type="PPE"]').classList.add('active');
+
+        await this.loadEntries();
+        this.renderLeaderView();
+    },
+
+    async exportData() {
+        await this.loadEntries();
+        if (this.entries.length === 0) return alert('No data to export.');
+
+        const sortedEntries = [...this.entries].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        const totals = {};
+
+        let tableRows = '';
+        sortedEntries.forEach(e => {
+            const key = `${e.subsection}-${e.item}`;
+            totals[key] = (totals[key] || 0) + (e.received - e.issued);
+            tableRows += `
+                <tr>
+                    <td>${e.subsection}</td>
+                    <td>${new Date(e.created_at).toLocaleString()}</td>
+                    <td>${e.item}</td>
+                    <td>${e.type}</td>
+                    <td>${e.leader_name}</td>
+                    <td>${e.employee}</td>
+                    <td style="text-align:right;">${e.issued}</td>
+                    <td style="text-align:right;">${e.received}</td>
+                    <td style="text-align:right;font-weight:bold;">${totals[key]}</td>
+                    <td>${e.notes || ''}</td>
+                </tr>
+            `;
+        });
+
+        const html = `
+            <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    table { border-collapse: collapse; font-family: Arial, sans-serif; }
+                    thead tr { background-color: #f97316; color: white; }
+                    th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
+                    th { font-weight: bold; text-transform: uppercase; font-size: 12px; }
+                    td { font-size: 12px; }
+                    tr:nth-child(even) { background-color: #f8f8f8; }
+                    .title { font-size: 18px; font-weight: bold; margin-bottom: 10px; font-family: Arial; }
+                </style>
+            </head>
+            <body>
+                <div class="title">Stock Tracking Report — ${new Date().toLocaleDateString()}</div>
+                <table>
+                    <thead><tr>
+                        <th>Department</th><th>Date</th><th>Item</th><th>Type</th>
+                        <th>Team Leader</th><th>Allocated To</th>
+                        <th>Issued</th><th>Received</th><th>Running Total</th><th>Notes</th>
+                    </tr></thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+            </body>
+            </html>
+        `;
+
+        const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Stock_Report_${new Date().toISOString().split('T')[0]}.xls`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+};
+
+app.init();
+zI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rYnNjYWNxbXN2bXZtdGV3cmxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzE3NjAsImV4cCI6MjEwMjgwNzc2MH0.uf30y8ce13VoIUTB1eyfurxellJa0sShsXeb335AnQI';
 
 // Initialize Supabase client (loaded from CDN as a global)
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
