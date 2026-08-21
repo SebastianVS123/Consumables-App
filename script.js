@@ -1,6 +1,6 @@
 // ============== SUPABASE CONFIG ==============
 const SUPABASE_URL = 'https://okbscacqmsvmvmtewrlh.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_g0Xk99hRIBJEkovLLRxaig_57-3ibRH';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rYnNjYWNxbXN2bXZtdGV3cmxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzE3NjAsImV4cCI6MjEwMjgwNzc2MH0.uf30y8ce13VoIUTB1eyfurxellJa0sShsXeb335AnQI';
 
 // Initialize Supabase client (loaded from CDN as a global)
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
