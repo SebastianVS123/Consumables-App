@@ -1,21 +1,17 @@
 // ============== SUPABASE CONFIG ==============
 const SUPABASE_URL = 'https://okbscacqmsvmvmtewrlh.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIU// ============== SUPABASE CONFIG ==============
-const SUPABASE_URL = 'https://okbscacqmsvmvmtewrlh.supabase.co';
-// IMPORTANT: This must be the LEGACY anon JWT key (starts with eyJ...)
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rYnNjYWNxbXN2bXZtdGV3cmxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzE3NjAsImV4cCI6MjEwMjgwNzc2MH0.uf30y8ce13VoIUTB1eyfurxellJa0sShsXeb335AnQI';
+// ⚠️ PASTE WHICHEVER KEY WORKED FOR YOU BEFORE:
+// Either your LEGACY JWT key (starts with eyJ...) OR your PUBLISHABLE key (starts with sb_publishable_)
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rYnNjYWNxbXN2bXZtdGV3cmxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzE3NjAsImV4cCI6MjEwMjgwNzc2MH0.uf30y8ce13VoIUTB1eyfurxellJa0sShsXeb335AnQI'; // <-- PUT YOUR WORKING KEY HERE
 
-// Initialize Supabase client
 let db;
 try {
     db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    console.log('Supabase client created OK');
 } catch (e) {
     console.error('Supabase init failed:', e);
 }
 
 // ============== ON-SCREEN ERROR DISPLAY ==============
-// If anything goes wrong anywhere in this file, we'll show it on screen
 function showPageError(msg) {
     let el = document.getElementById('page-error-banner');
     if (!el) {
@@ -29,7 +25,7 @@ function showPageError(msg) {
 }
 
 window.addEventListener('error', (event) => {
-    showPageError('JS error: ' + event.message + (event.filename ? ' at ' + event.filename + ':' + event.lineno : ''));
+    showPageError('JS error: ' + event.message);
 });
 
 window.addEventListener('unhandledrejection', (event) => {
@@ -45,7 +41,11 @@ const app = {
 
     async init() {
         if (!db) {
-            showPageError('Supabase client is not initialized. Check your keys in script.js line 4-5.');
+            showPageError('Supabase not initialized. Set the legacy key in script.js line 5.');
+            return;
+        }
+        if (SUPABASE_ANON_KEY === 'PUT_YOUR_LEGACY_ANON_KEY_HERE') {
+            showPageError('You need to replace PUT_YOUR_LEGACY_ANON_KEY_HERE on line 5 with your actual eyJ... key.');
             return;
         }
         this.setupEventListeners();
@@ -54,7 +54,7 @@ const app = {
             try {
                 this.currentUser = JSON.parse(session);
                 if (this.currentUser.role === 'admin') this.renderAdminView();
-                else this.renderLeaderView();
+                else this.showHub();
             } catch (e) {
                 sessionStorage.removeItem('current_user');
             }
@@ -81,6 +81,7 @@ const app = {
         if (el) el.style.display = 'none';
     },
 
+    // ============== EVENT SETUP ==============
     setupEventListeners() {
         const self = this;
 
@@ -106,24 +107,18 @@ const app = {
                     .select('*')
                     .eq('username', username)
                     .eq('password', password)
-                    .maybeSingle(); // <-- maybeSingle doesn't error when 0 rows
+                    .maybeSingle();
 
                 self.hideError();
 
                 if (!data) {
-                    self.showError('No user with that username/password exists. (Did you run the SQL setup? Is the admin "Admin@1234" seeded?)');
+                    self.showError('No user with that username/password exists.');
                     return;
                 }
-
                 if (error) {
-                    if (error.message && error.message.includes('relation')) {
-                        self.showError('TABLES DO NOT EXIST. Run the SQL setup in Supabase SQL Editor.');
-                    } else {
-                        self.showError('DB error: ' + error.message);
-                    }
+                    self.showError(error.message);
                     return;
                 }
-
                 await self.login(data);
             } catch (err) {
                 self.hideError();
@@ -153,56 +148,143 @@ const app = {
             self.renderAdminView();
         };
 
-        // LEADER: Toggle PPE/Consumables
+        // PPE/CONSUMABLES toggle on both forms
         document.querySelectorAll('.toggle-btn').forEach(btn => {
             btn.onclick = () => {
-                document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                const formEl = btn.closest('form');
+                formEl.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
+                const itemSel = formEl.querySelector('select[id$="item-select"]');
+                if (itemSel) self.filterItemsByCategory(itemSel);
             };
         });
 
-        // LEADER: Show/hide "Other"
+        // Item dropdown - show/hide Other input
         document.getElementById('item-select').onchange = (e) => {
             document.getElementById('other-item-container').classList.toggle('hidden', e.target.value !== 'Other');
         };
-
-        // LEADER: Add Employee
-        document.getElementById('add-employee-form').onsubmit = async function (e) {
-            e.preventDefault();
-            const name = document.getElementById('employee-name').value;
-            const { error } = await db.from('employees').insert([{
-                name,
-                subsection: self.currentUser.subsection,
-                leader_id: self.currentUser.id
-            }]);
-            if (error) return alert(error.message);
-            e.target.reset();
-            await self.loadEmployees();
-            self.renderLeaderView();
+        document.getElementById('arrival-item-select').onchange = (e) => {
+            document.getElementById('arrival-other-item-container').classList.toggle('hidden', e.target.value !== 'Other');
         };
 
-        // Remove employee (event delegated)
-        document.getElementById('employee-list').addEventListener('click', async function (e) {
-            if (e.target.classList.contains('remove-emp')) {
-                const id = e.target.dataset.id;
-                if (!confirm('Remove this employee?')) return;
-                await db.from('employees').delete().eq('id', id);
+        // Add Employee forms
+        document.querySelectorAll('form[id^="add-employee"]').forEach(form => {
+            form.onsubmit = async function (e) {
+                e.preventDefault();
+                const nameInput = form.querySelector('input');
+                const name = nameInput.value.trim();
+                if (!name) return;
+
+                if (self.employees.some(emp => emp.subsection === self.currentUser.subsection && emp.name.toLowerCase() === name.toLowerCase())) {
+                    alert('Employee already added.');
+                    return;
+                }
+
+                const { error } = await db.from('employees').insert([{
+                    name,
+                    subsection: self.currentUser.subsection,
+                    leader_id: self.currentUser.id
+                }]);
+                if (error) return alert(error.message);
+                nameInput.value = '';
                 await self.loadEmployees();
-                self.renderLeaderView();
-            }
+                self.renderSidePanels();
+            };
         });
 
+        // Remove employee
+        document.querySelectorAll('[id^="employee-list"]').forEach(ul => {
+            ul.addEventListener('click', async function (e) {
+                if (e.target.classList.contains('remove-emp')) {
+                    const id = e.target.dataset.id;
+                    if (!confirm('Remove this employee?')) return;
+                    await db.from('employees').delete().eq('id', id);
+                    await self.loadEmployees();
+                    self.renderSidePanels();
+                }
+            });
+        });
+
+        // Issue form submit
         document.getElementById('movement-form').onsubmit = function (e) {
             e.preventDefault();
-            self.showConfirmModal();
+            self.showConfirmModal('issue');
         };
 
+        // Arrival form submit
+        document.getElementById('arrival-form').onsubmit = function (e) {
+            e.preventDefault();
+            self.showConfirmModal('arrival');
+        };
+
+        // Modal buttons
         document.getElementById('btn-cancel').onclick = () => {
             document.getElementById('confirm-modal').style.display = 'none';
         };
         document.getElementById('btn-confirm').onclick = () => self.submitMovement();
     },
 
+    filterItemsByCategory(selectEl) {
+        const formEl = selectEl.closest('form');
+        const activeType = formEl.querySelector('.toggle-btn.active').dataset.type;
+        let firstVisible = null;
+        for (const opt of Array.from(selectEl.options)) {
+            if (!opt.dataset.category) continue;
+            const visible = opt.dataset.category === activeType;
+            opt.style.display = visible ? '' : 'none';
+            if (visible && firstVisible === null) firstVisible = opt.value;
+        }
+        if (firstVisible) selectEl.value = firstVisible;
+        selectEl.dispatchEvent(new Event('change'));
+    },
+
+    // ============== VIEW SWITCHING ==============
+    hideAllViews() {
+        ['login-view', 'admin-view', 'hub-view', 'leader-view', 'arrival-view'].forEach(id => {
+            document.getElementById(id).classList.add('hidden');
+        });
+    },
+
+    async showHub() {
+        this.hideAllViews();
+        document.getElementById('hub-view').classList.remove('hidden');
+        document.getElementById('hub-title').textContent = `${this.currentUser.subsection} SUBSECTION`;
+        document.getElementById('hub-leader-name').textContent = this.currentUser.name;
+        await this.loadEmployees();
+        await this.loadEntries();
+    },
+
+    async showIssuePage() {
+        this.hideAllViews();
+        document.getElementById('leader-view').classList.remove('hidden');
+        document.getElementById('view-title').textContent = `${this.currentUser.subsection} — ISSUE STOCK`;
+        document.getElementById('leader-display-name').textContent = this.currentUser.name;
+        await this.loadEmployees();
+        await this.loadEntries();
+        this.renderSidePanels();
+        this.setActiveToggle('movement-form', 'PPE');
+        this.filterItemsByCategory(document.getElementById('item-select'));
+    },
+
+    async showArrivalPage() {
+        this.hideAllViews();
+        document.getElementById('arrival-view').classList.remove('hidden');
+        document.getElementById('arrival-title').textContent = `${this.currentUser.subsection} — ARRIVING STOCK`;
+        document.getElementById('arrival-display-name').textContent = this.currentUser.name;
+        await this.loadEmployees();
+        await this.loadEntries();
+        this.renderSidePanels();
+        this.setActiveToggle('arrival-form', 'PPE');
+        this.filterItemsByCategory(document.getElementById('arrival-item-select'));
+    },
+
+    setActiveToggle(formId, type) {
+        document.querySelectorAll(`#${formId} .toggle-btn`).forEach(b => b.classList.remove('active'));
+        const target = document.querySelector(`#${formId} .toggle-btn[data-type="${type}"]`);
+        if (target) target.classList.add('active');
+    },
+
+    // ============== LOGIN / LOGOUT ==============
     async login(user) {
         try {
             this.currentUser = user;
@@ -217,22 +299,22 @@ const app = {
                 await this.loadUsers();
                 this.renderAdminView();
             } else {
-                this.renderLeaderView();
+                this.showHub();
             }
         } catch (err) {
-            showPageError('Login routine failed: ' + err.message);
+            showPageError('Login failed: ' + err.message);
         }
     },
 
     async logout() {
         this.currentUser = null;
         sessionStorage.removeItem('current_user');
-        document.getElementById('admin-view').classList.add('hidden');
-        document.getElementById('leader-view').classList.add('hidden');
+        this.hideAllViews();
         document.getElementById('login-view').classList.remove('hidden');
         document.getElementById('login-form').reset();
     },
 
+    // ============== DATA LOADERS ==============
     async loadUsers() {
         const { data } = await db.from('users').select('*').eq('role', 'leader').order('created_at', { ascending: true });
         this.users = data || [];
@@ -255,7 +337,9 @@ const app = {
         this.renderAdminView();
     },
 
+    // ============== ADMIN VIEW ==============
     renderAdminView() {
+        this.hideAllViews();
         document.getElementById('admin-view').classList.remove('hidden');
         const tbody = document.querySelector('#leaders-table tbody');
         tbody.innerHTML = '';
@@ -270,20 +354,21 @@ const app = {
         });
     },
 
-    renderLeaderView() {
-        document.getElementById('leader-view').classList.remove('hidden');
-        document.getElementById('view-title').textContent = `${this.currentUser.subsection} SUBSECTION`;
-        document.getElementById('leader-display-name').textContent = this.currentUser.name;
-
+    // ============== SIDE PANELS ==============
+    renderSidePanels() {
+        if (!this.currentUser) return;
         const subEmployees = this.employees.filter(e => e.subsection === this.currentUser.subsection);
 
-        const select = document.getElementById('allocate-employee');
-        select.innerHTML = subEmployees.length
+        const empOptsHtml = subEmployees.length
             ? subEmployees.map(e => `<option value="${e.name}">${e.name}</option>`).join('')
             : '<option value="">No employees added yet</option>';
 
-        const list = document.getElementById('employee-list');
-        list.innerHTML = subEmployees.length
+        ['allocate-employee', 'arrival-allocate-employee'].forEach(id => {
+            const sel = document.getElementById(id);
+            if (sel) sel.innerHTML = empOptsHtml;
+        });
+
+        const empListHtml = subEmployees.length
             ? subEmployees.map(e => `
                 <li style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid rgba(255,255,255,0.05);">
                     <span>• ${e.name}</span>
@@ -292,69 +377,119 @@ const app = {
             `).join('')
             : '<li>No employees added yet.</li>';
 
-        const recent = document.getElementById('recent-entries');
+        ['employee-list', 'employee-list-arrival'].forEach(id => {
+            const ul = document.getElementById(id);
+            if (ul) ul.innerHTML = empListHtml;
+        });
+
         const subEntries = this.entries
             .filter(e => e.subsection === this.currentUser.subsection)
             .slice(-5)
             .reverse();
-        recent.innerHTML = subEntries.length
-            ? subEntries.map(e => `
-                <div style="border-bottom:1px solid var(--border-color);padding:0.5rem 0;">
-                    <div style="font-weight:600;">${e.item} → ${e.employee}</div>
-                    <div style="font-size:0.75rem;">Issued: ${e.issued} | Received: ${e.received} | ${new Date(e.created_at).toLocaleString()}</div>
-                </div>
-            `).join('')
+
+        const recentHtml = subEntries.length
+            ? subEntries.map(e => {
+                const action = e.received > 0
+                    ? `<span style="color:#22c55e;">📥 +${e.received}</span>`
+                    : `<span style="color:#f97316;">📤 -${e.issued}</span>`;
+                return `
+                    <div style="border-bottom:1px solid var(--border-color);padding:0.5rem 0;">
+                        <div style="display:flex;justify-content:space-between;font-weight:600;">
+                            <span>${e.item} → ${e.employee}</span>
+                            ${action}
+                        </div>
+                        <div style="font-size:0.75rem;color:#94a3b8;">${(e.type || '').toLowerCase()} · ${new Date(e.created_at).toLocaleString()}</div>
+                    </div>
+                `;
+            }).join('')
             : 'No entries yet.';
+
+        ['recent-entries', 'recent-entries-arrival'].forEach(id => {
+            const div = document.getElementById(id);
+            if (div) div.innerHTML = recentHtml;
+        });
     },
 
-    showConfirmModal() {
-        const item = document.getElementById('item-select').value === 'Other'
-            ? document.getElementById('other-item-text').value
-            : document.getElementById('item-select').value;
-        const employee = document.getElementById('allocate-employee').value;
-        const issued = document.getElementById('check-issued').checked ? document.getElementById('amount-issued').value : 0;
-        const received = document.getElementById('check-received').checked ? document.getElementById('amount-received').value : 0;
+    // ============== FORM SUBMISSIONS ==============
+    showConfirmModal(kind) {
+        const data = this._getFormData(kind);
+        if (!data) return;
 
-        if (!employee) return alert('Please select an employee first.');
+        if (!data.employee) return alert('Please select an employee.');
+        if (!data.amount || data.amount <= 0) return alert('Please enter an amount greater than 0.');
 
+        const verb = kind === 'issue' ? 'Issued' : 'Received';
         document.getElementById('confirm-details').innerHTML = `
-            Item: ${item}<br>
-            Employee: ${employee}<br>
-            Issued: ${issued}<br>
-            Received: ${received}
+            Type: ${data.type}<br>
+            Item: ${data.item}<br>
+            Employee: ${data.employee}<br>
+            ${verb}: ${data.amount}<br>
+            Notes: ${data.notes || '(none)'}
         `;
+        document.getElementById('confirm-modal').dataset.kind = kind;
         document.getElementById('confirm-modal').style.display = 'flex';
     },
 
-    async submitMovement() {
-        const type = document.querySelector('.toggle-btn.active').dataset.type;
-        const item = document.getElementById('item-select').value === 'Other'
-            ? document.getElementById('other-item-text').value
-            : document.getElementById('item-select').value;
-        const employee = document.getElementById('allocate-employee').value;
-        const issued = parseInt(document.getElementById('check-issued').checked ? document.getElementById('amount-issued').value : 0);
-        const received = parseInt(document.getElementById('check-received').checked ? document.getElementById('amount-received').value : 0);
-        const notes = document.getElementById('notes').value;
+    _getFormData(kind) {
+        const formId = kind === 'issue' ? 'movement-form' : 'arrival-form';
+        const form = document.getElementById(formId);
+        if (!form) return null;
 
-        const { error } = await db.from('stock_entries').insert([{
+        const type = form.querySelector('.toggle-btn.active').dataset.type;
+        const itemSel = form.querySelector('select[id$="item-select"]');
+        const otherInput = form.querySelector('input[id$="other-item-text"]');
+        const empSel = form.querySelector('select[id$="allocate-employee"]');
+        const amountInput = form.querySelector('input[type="number"]');
+        const notesInput = form.querySelector('textarea');
+
+        let item = itemSel.value;
+        if (item === 'Other') item = (otherInput.value || '').trim();
+        if (!item) { alert('Please select / specify an item.'); return null; }
+
+        return {
+            type,
+            item,
+            employee: empSel.value,
+            amount: parseInt(amountInput.value || '0'),
+            notes: (notesInput.value || '').trim()
+        };
+    },
+
+    async submitMovement() {
+        const kind = document.getElementById('confirm-modal').dataset.kind;
+        const data = this._getFormData(kind);
+        if (!data) return;
+
+        const insertRow = {
             subsection: this.currentUser.subsection,
             leader_id: this.currentUser.id,
             leader_name: this.currentUser.name,
-            type, item, employee, issued, received, notes
-        }]);
+            type: data.type,
+            item: data.item,
+            employee: data.employee,
+            issued: kind === 'issue' ? data.amount : 0,
+            received: kind === 'arrival' ? data.amount : 0,
+            notes: data.notes
+        };
+
+        const { error } = await db.from('stock_entries').insert([insertRow]);
 
         if (error) return alert('Save failed: ' + error.message);
 
         document.getElementById('confirm-modal').style.display = 'none';
-        document.getElementById('movement-form').reset();
-        document.getElementById('other-item-container').classList.add('hidden');
-        document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
-        document.querySelector('[data-type="PPE"]').classList.add('active');
+
+        const formId = kind === 'issue' ? 'movement-form' : 'arrival-form';
+        document.getElementById(formId).reset();
+        const otherContainerId = kind === 'issue' ? 'other-item-container' : 'arrival-other-item-container';
+        document.getElementById(otherContainerId).classList.add('hidden');
+        this.setActiveToggle(formId, 'PPE');
+        this.filterItemsByCategory(document.getElementById(kind === 'issue' ? 'item-select' : 'arrival-item-select'));
 
         await this.loadEntries();
-        this.renderLeaderView();
+        this.showHub();
     },
 
+    // ============== EXCEL EXPORT ==============
     async exportData() {
         await this.loadEntries();
         if (this.entries.length === 0) return alert('No data to export.');
@@ -366,16 +501,18 @@ const app = {
         sortedEntries.forEach(e => {
             const key = `${e.subsection}-${e.item}`;
             totals[key] = (totals[key] || 0) + (e.received - e.issued);
+            const direction = e.received > 0 ? 'Received' : 'Issued';
+            const amt = e.received > 0 ? e.received : e.issued;
             tableRows += `
                 <tr>
                     <td>${e.subsection}</td>
                     <td>${new Date(e.created_at).toLocaleString()}</td>
                     <td>${e.item}</td>
-                    <td>${e.type}</td>
+                    <td>${e.type || ''}</td>
+                    <td>${direction}</td>
                     <td>${e.leader_name}</td>
                     <td>${e.employee}</td>
-                    <td style="text-align:right;">${e.issued}</td>
-                    <td style="text-align:right;">${e.received}</td>
+                    <td style="text-align:right;">${amt}</td>
                     <td style="text-align:right;font-weight:bold;">${totals[key]}</td>
                     <td>${e.notes || ''}</td>
                 </tr>
@@ -401,392 +538,8 @@ const app = {
                 <table>
                     <thead><tr>
                         <th>Department</th><th>Date</th><th>Item</th><th>Type</th>
-                        <th>Team Leader</th><th>Allocated To</th>
-                        <th>Issued</th><th>Received</th><th>Running Total</th><th>Notes</th>
-                    </tr></thead>
-                    <tbody>${tableRows}</tbody>
-                </table>
-            </body>
-            </html>
-        `;
-
-        const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Stock_Report_${new Date().toISOString().split('T')[0]}.xls`;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
-};
-
-app.init();
-zI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rYnNjYWNxbXN2bXZtdGV3cmxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzE3NjAsImV4cCI6MjEwMjgwNzc2MH0.uf30y8ce13VoIUTB1eyfurxellJa0sShsXeb335AnQI';
-
-// Initialize Supabase client (loaded from CDN as a global)
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// ============== APP STATE ==============
-const app = {
-    currentUser: null,
-    employees: [],
-    entries: [],
-
-    async init() {
-        this.setupEventListeners();
-        const session = sessionStorage.getItem('current_user');
-        if (session) {
-            this.currentUser = JSON.parse(session);
-            if (this.currentUser.role === 'admin') this.renderAdminView();
-            else this.renderLeaderView();
-        }
-    },
-
-    setupEventListeners() {
-        const showError = (msg) => {
-            const el = document.getElementById('login-error');
-            el.textContent = msg;
-            el.style.display = 'block';
-            el.style.color = '#ef4444';
-            el.style.marginTop = '1rem';
-            el.style.textAlign = 'center';
-            el.style.fontSize = '0.85rem';
-            console.error('LOGIN ERROR:', msg);
-        };
-
-        // LOGIN
-        document.getElementById('login-form').onsubmit = async (e) => {
-            e.preventDefault();
-            hideError();
-
-            const username = document.getElementById('login-username').value.trim().toLowerCase();
-            const password = document.getElementById('login-password').value;
-
-            if (!username || !password) {
-                showError('Please type both username and password.');
-                return;
-            }
-
-            // Show "checking..." while we wait
-            showError('Checking...');
-            document.getElementById('login-error').style.color = '#94a3b8';
-
-            // First, sanity check that Supabase is reachable
-            if (!db) {
-                hideError();
-                showError('Supabase is not loaded. Check your internet connection.');
-                return;
-            }
-
-            try {
-                const { data, error } = await db
-                    .from('users')
-                    .select('*')
-                    .eq('username', username)
-                    .eq('password', password)
-                    .single();
-
-                if (error) {
-                    hideError();
-                    if (error.code === 'PGRST116') {
-                        showError('No user found with those details. (Tables might not exist yet — run the SQL in Supabase.)');
-                    } else if (error.message && error.message.includes('relation')) {
-                        showError('Database tables do not exist yet. Run the SQL setup in Supabase.');
-                    } else {
-                        showError('DB Error: ' + (error.message || JSON.stringify(error)));
-                    }
-                    return;
-                }
-                if (!data) {
-                    hideError();
-                    showError('No user with that username/password exists.');
-                    return;
-                }
-                await this.login(data);
-            } catch (err) {
-                hideError();
-                showError('Connection error: ' + err.message);
-            }
-        };
-
-        const hideError = () => {
-            const el = document.getElementById('login-error');
-            el.style.display = 'none';
-        };
-
-        // ADMIN: Add Team Leader
-        document.getElementById('add-leader-form').onsubmit = async (e) => {
-            e.preventDefault();
-            const username = document.getElementById('leader-username').value.trim().toLowerCase();
-            const name = document.getElementById('leader-name').value;
-            const pass = document.getElementById('leader-pass').value;
-            const subsection = document.getElementById('leader-subsection').value;
-
-            const { error } = await db.from('users').insert([{
-                username, name, password: pass, role: 'leader', subsection
-            }]);
-
-            if (error) {
-                alert('Could not add user: ' + error.message);
-                return;
-            }
-            alert(`Team leader created!\nLogin: ${username} / ${pass}`);
-            e.target.reset();
-            await this.loadUsers();
-            this.renderAdminView();
-        };
-
-        // LEADER: Toggle PPE/Consumables
-        document.querySelectorAll('.toggle-btn').forEach(btn => {
-            btn.onclick = () => {
-                document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-            };
-        });
-
-        // LEADER: Show/hide "Other" text input
-        document.getElementById('item-select').onchange = (e) => {
-            document.getElementById('other-item-container').classList.toggle('hidden', e.target.value !== 'Other');
-        };
-
-        // LEADER: Add Employee
-        document.getElementById('add-employee-form').onsubmit = async (e) => {
-            e.preventDefault();
-            const name = document.getElementById('employee-name').value;
-            const { error } = await db.from('employees').insert([{
-                name,
-                subsection: this.currentUser.subsection,
-                leader_id: this.currentUser.id
-            }]);
-            if (error) return alert(error.message);
-            e.target.reset();
-            await this.loadEmployees();
-            this.renderLeaderView();
-        };
-
-        // LEADER: Remove Employee (event delegation)
-        document.getElementById('employee-list').addEventListener('click', async (e) => {
-            if (e.target.classList.contains('remove-emp')) {
-                const id = e.target.dataset.id;
-                if (!confirm('Remove this employee?')) return;
-                await db.from('employees').delete().eq('id', id);
-                await this.loadEmployees();
-                this.renderLeaderView();
-            }
-        });
-
-        // LEADER: Submit Movement → opens confirm modal
-        document.getElementById('movement-form').onsubmit = (e) => {
-            e.preventDefault();
-            this.showConfirmModal();
-        };
-
-        // Modal buttons
-        document.getElementById('btn-cancel').onclick = () => {
-            document.getElementById('confirm-modal').style.display = 'none';
-        };
-        document.getElementById('btn-confirm').onclick = () => this.submitMovement();
-    },
-
-    async login(user) {
-        this.currentUser = user;
-        sessionStorage.setItem('current_user', JSON.stringify(user));
-        document.getElementById('login-view').classList.add('hidden');
-        document.getElementById('login-error').style.display = 'none';
-
-        await this.loadEmployees();
-        await this.loadEntries();
-
-        if (user.role === 'admin') {
-            await this.loadUsers();
-            this.renderAdminView();
-        } else {
-            this.renderLeaderView();
-        }
-    },
-
-    async logout() {
-        this.currentUser = null;
-        sessionStorage.removeItem('current_user');
-        document.getElementById('admin-view').classList.add('hidden');
-        document.getElementById('leader-view').classList.add('hidden');
-        document.getElementById('login-view').classList.remove('hidden');
-        document.getElementById('login-form').reset();
-    },
-
-    async loadUsers() {
-        const { data } = await db.from('users').select('*').eq('role', 'leader').order('created_at', { ascending: true });
-        this.users = data || [];
-    },
-
-    async loadEmployees() {
-        const { data } = await db.from('employees').select('*');
-        this.employees = data || [];
-    },
-
-    async loadEntries() {
-        const { data } = await db.from('stock_entries').select('*');
-        this.entries = data || [];
-    },
-
-    async deleteUser(username) {
-        if (!confirm('Delete this team leader?')) return;
-        await db.from('users').delete().eq('username', username);
-        await this.loadUsers();
-        this.renderAdminView();
-    },
-
-    renderAdminView() {
-        document.getElementById('admin-view').classList.remove('hidden');
-        const tbody = document.querySelector('#leaders-table tbody');
-        tbody.innerHTML = '';
-        (this.users || []).forEach(u => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${u.name}</td>
-                <td>${u.subsection}</td>
-                <td><button onclick="app.deleteUser('${u.username}')" class="secondary" style="padding:0.25rem 0.5rem;font-size:0.75rem;">Delete</button></td>
-            `;
-            tbody.appendChild(tr);
-        });
-    },
-
-    renderLeaderView() {
-        document.getElementById('leader-view').classList.remove('hidden');
-        document.getElementById('view-title').textContent = `${this.currentUser.subsection} SUBSECTION`;
-        document.getElementById('leader-display-name').textContent = this.currentUser.name;
-
-        const subEmployees = this.employees.filter(e => e.subsection === this.currentUser.subsection);
-
-        // Dropdown
-        const select = document.getElementById('allocate-employee');
-        select.innerHTML = subEmployees.length
-            ? subEmployees.map(e => `<option value="${e.name}">${e.name}</option>`).join('')
-            : '<option value="">No employees added yet</option>';
-
-        // List with delete buttons
-        const list = document.getElementById('employee-list');
-        list.innerHTML = subEmployees.length
-            ? subEmployees.map(e => `
-                <li style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid rgba(255,255,255,0.05);">
-                    <span>• ${e.name}</span>
-                    <button class="remove-emp secondary" data-id="${e.id}" style="width:auto;padding:0.15rem 0.5rem;font-size:0.7rem;">Remove</button>
-                </li>
-            `).join('')
-            : '<li>No employees added yet.</li>';
-
-        // Recent entries
-        const recent = document.getElementById('recent-entries');
-        const subEntries = this.entries
-            .filter(e => e.subsection === this.currentUser.subsection)
-            .slice(-5)
-            .reverse();
-        recent.innerHTML = subEntries.length
-            ? subEntries.map(e => `
-                <div style="border-bottom:1px solid var(--border-color);padding:0.5rem 0;">
-                    <div style="font-weight:600;">${e.item} → ${e.employee}</div>
-                    <div style="font-size:0.75rem;">Issued: ${e.issued} | Received: ${e.received} | ${new Date(e.created_at).toLocaleString()}</div>
-                </div>
-            `).join('')
-            : 'No entries yet.';
-    },
-
-    showConfirmModal() {
-        const item = document.getElementById('item-select').value === 'Other'
-            ? document.getElementById('other-item-text').value
-            : document.getElementById('item-select').value;
-        const employee = document.getElementById('allocate-employee').value;
-        const issued = document.getElementById('check-issued').checked ? document.getElementById('amount-issued').value : 0;
-        const received = document.getElementById('check-received').checked ? document.getElementById('amount-received').value : 0;
-
-        if (!employee) return alert('Please select an employee first.');
-
-        document.getElementById('confirm-details').innerHTML = `
-            Item: ${item}<br>
-            Employee: ${employee}<br>
-            Issued: ${issued}<br>
-            Received: ${received}
-        `;
-        document.getElementById('confirm-modal').style.display = 'flex';
-    },
-
-    async submitMovement() {
-        const type = document.querySelector('.toggle-btn.active').dataset.type;
-        const item = document.getElementById('item-select').value === 'Other'
-            ? document.getElementById('other-item-text').value
-            : document.getElementById('item-select').value;
-        const employee = document.getElementById('allocate-employee').value;
-        const issued = parseInt(document.getElementById('check-issued').checked ? document.getElementById('amount-issued').value : 0);
-        const received = parseInt(document.getElementById('check-received').checked ? document.getElementById('amount-received').value : 0);
-        const notes = document.getElementById('notes').value;
-
-        const { error } = await db.from('stock_entries').insert([{
-            subsection: this.currentUser.subsection,
-            leader_id: this.currentUser.id,
-            leader_name: this.currentUser.name,
-            type, item, employee, issued, received, notes
-        }]);
-
-        if (error) return alert('Save failed: ' + error.message);
-
-        document.getElementById('confirm-modal').style.display = 'none';
-        document.getElementById('movement-form').reset();
-        document.getElementById('other-item-container').classList.add('hidden');
-        document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
-        document.querySelector('[data-type="PPE"]').classList.add('active');
-
-        await this.loadEntries();
-        this.renderLeaderView();
-    },
-
-    async exportData() {
-        await this.loadEntries();
-        if (this.entries.length === 0) return alert('No data to export.');
-
-        const sortedEntries = [...this.entries].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        const totals = {};
-
-        let tableRows = '';
-        sortedEntries.forEach(e => {
-            const key = `${e.subsection}-${e.item}`;
-            totals[key] = (totals[key] || 0) + (e.received - e.issued);
-            tableRows += `
-                <tr>
-                    <td>${e.subsection}</td>
-                    <td>${new Date(e.created_at).toLocaleString()}</td>
-                    <td>${e.item}</td>
-                    <td>${e.type}</td>
-                    <td>${e.leader_name}</td>
-                    <td>${e.employee}</td>
-                    <td style="text-align:right;">${e.issued}</td>
-                    <td style="text-align:right;">${e.received}</td>
-                    <td style="text-align:right;font-weight:bold;">${totals[key]}</td>
-                    <td>${e.notes || ''}</td>
-                </tr>
-            `;
-        });
-
-        const html = `
-            <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-            <head>
-                <meta charset="UTF-8">
-                <style>
-                    table { border-collapse: collapse; font-family: Arial, sans-serif; }
-                    thead tr { background-color: #f97316; color: white; }
-                    th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
-                    th { font-weight: bold; text-transform: uppercase; font-size: 12px; }
-                    td { font-size: 12px; }
-                    tr:nth-child(even) { background-color: #f8f8f8; }
-                    .title { font-size: 18px; font-weight: bold; margin-bottom: 10px; font-family: Arial; }
-                </style>
-            </head>
-            <body>
-                <div class="title">Stock Tracking Report — ${new Date().toLocaleDateString()}</div>
-                <table>
-                    <thead><tr>
-                        <th>Department</th><th>Date</th><th>Item</th><th>Type</th>
-                        <th>Team Leader</th><th>Allocated To</th>
-                        <th>Issued</th><th>Received</th><th>Running Total</th><th>Notes</th>
+                        <th>Direction</th><th>Team Leader</th><th>Allocated To</th>
+                        <th>Quantity</th><th>Running Total</th><th>Notes</th>
                     </tr></thead>
                     <tbody>${tableRows}</tbody>
                 </table>
