@@ -228,10 +228,13 @@ const app = {
         // Modal buttons
         document.getElementById('btn-cancel').onclick = () => {
             document.getElementById('confirm-modal').style.display = 'none';
+            // Reset override flow if user cancels from confirm
+            self._forceSubmitOnWarning = false;
+            self._pendingOverrideReason = null;
         };
         document.getElementById('btn-confirm').onclick = () => self.submitMovement();
 
-        // Warning modal buttons
+        // Warning modal buttons (over usable stock)
         document.getElementById('btn-warn-cancel').onclick = () => {
             document.getElementById('warning-modal').style.display = 'none';
         };
@@ -239,6 +242,36 @@ const app = {
             document.getElementById('warning-modal').style.display = 'none';
             self._forceSubmitOnWarning = true;
             self.submitMovement();
+        };
+
+        // Audit warning modal buttons (issued > received for consumables)
+        document.getElementById('btn-audit-cancel').onclick = () => {
+            document.getElementById('audit-warning-modal').style.display = 'none';
+            self._pendingOverrideReason = null;
+        };
+        document.getElementById('btn-audit-continue').onclick = () => {
+            // User clicked "I am aware, override" — now ask for a reason
+            document.getElementById('audit-warning-modal').style.display = 'none';
+            document.getElementById('override-reason').value = '';
+            document.getElementById('override-modal').style.display = 'flex';
+        };
+
+        // Override reason modal buttons
+        document.getElementById('btn-override-cancel').onclick = () => {
+            document.getElementById('override-modal').style.display = 'none';
+            self._pendingOverrideReason = null;
+        };
+        document.getElementById('btn-override-submit').onclick = () => {
+            const reason = document.getElementById('override-reason').value.trim();
+            if (!reason) {
+                alert('A reason is required when overriding the audit rule.');
+                return;
+            }
+            document.getElementById('override-modal').style.display = 'none';
+            self._pendingOverrideReason = reason;
+            // Now open the standard confirmation modal with override flag set
+            self._forceSubmitOnWarning = true;
+            self.showConfirmModal(self._currentSubmitKind || 'issue');
         };
     },
 
@@ -495,6 +528,23 @@ const app = {
                 return alert('Enter an amount in either "Amount Issued" or "Old Stock Returned".');
             }
 
+            // Stash current kind so override-modal flow can come back here
+            this._currentSubmitKind = 'issue';
+
+            // Audit rule: For consumables, if issuing more than what was returned, block.
+            // PPE is exempt from this rule.
+            if (data.type === 'CONSUMABLES' && issuing > receiving && !this._forceSubmitOnWarning) {
+                // We haven't yet completed override flow — show audit warning
+                document.getElementById('audit-warning-details').innerHTML = `
+                    <strong>Are you sure?</strong> Currently amount issued (<strong>${issuing}</strong>) exceeds
+                    amount received from employee (<strong>${receiving}</strong>) for <strong>${data.item}</strong>.
+                    <br><br>
+                    <em>This is against the rules. Every issue should match a return.</em>
+                `;
+                document.getElementById('audit-warning-modal').style.display = 'flex';
+                return;
+            }
+
             if (data.type === 'CONSUMABLES' && issuing > 0) {
                 const liveStock = this.computeUsableStock(data.item);
                 if (issuing > Math.max(0, liveStock)) {
@@ -512,14 +562,19 @@ const app = {
                 }
             }
 
+            const overrideLine = this._pendingOverrideReason
+                ? `<div style="margin-top:0.5rem;padding:0.5rem;background:rgba(239,68,68,0.1);border-left:3px solid #ef4444;font-size:0.85rem;"><strong>OVERRIDE REASON:</strong> ${this._pendingOverrideReason}</div>`
+                : '';
+
             document.getElementById('confirm-details').innerHTML = `
                 Type: ${data.type}<br>
                 Item: ${data.item}<br>
                 Employee: ${data.employee}<br>
                 Amount Issued: ${issuing}<br>
-                Used Stock Returned (audit / disposed): ${receiving}<br>
-                <span style="font-size:0.75rem;color:var(--text-secondary);">Note: returned used stock is logged only for audit and does NOT re-enter usable inventory.</span><br>
+                Old Stock Returned (audit / disposed): ${receiving}<br>
+                <span style="font-size:0.75rem;color:var(--text-secondary);">Note: returned old stock is logged only for audit and does NOT re-enter usable inventory.</span><br>
                 Notes: ${data.notes || '(none)'}
+                ${overrideLine}
             `;
         } else if (kind === 'arrival') {
             if (!data.amount || data.amount <= 0) return alert('Please enter an amount greater than 0.');
@@ -577,6 +632,12 @@ const app = {
         const data = this._getFormData(kind);
         if (!data) return;
 
+        // Compose final notes — if there was an override reason, prefix it for admin visibility
+        let finalNotes = data.notes || '';
+        if (this._pendingOverrideReason) {
+            finalNotes = `[OVERRIDE: ${this._pendingOverrideReason}]${finalNotes ? ' | ' + finalNotes : ''}`;
+        }
+
         const insertRow = {
             subsection: this.currentUser.subsection,
             leader_id: this.currentUser.id,
@@ -586,10 +647,12 @@ const app = {
             employee: data.employee || null,
             issued: kind === 'issue' ? (data.issued || 0) : 0,
             received: kind === 'issue' ? (data.received || 0) : (data.amount || 0),
-            notes: data.notes
+            notes: finalNotes
         };
 
+        // Reset override flow flags after composing
         this._forceSubmitOnWarning = false;
+        this._pendingOverrideReason = null;
 
         const { error } = await db.from('stock_entries').insert([insertRow]);
         if (error) return alert('Save failed: ' + error.message);
