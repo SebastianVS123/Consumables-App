@@ -70,6 +70,15 @@ const app = {
     users: [],
 
     async init() {
+        // IMMEDIATELY rebuild the dropdowns so the page never shows the
+        // hardcoded full list of 10 items at first render.
+        try {
+            populateItemDropdown('item-select', 'PPE');
+            populateItemDropdown('arrival-item-select', 'PPE');
+        } catch (e) {
+            console.error('Initial dropdown populate failed:', e);
+        }
+
         if (!db) {
             showPageError('Supabase not initialized.');
             return;
