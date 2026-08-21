@@ -315,6 +315,31 @@ const app = {
             self._forceSubmitOnWarning = true;
             self.showConfirmModal(self._currentSubmitKind || 'issue');
         };
+
+        // Clear-data two-step verification handlers
+        document.getElementById('btn-clear-cancel-1').onclick = () => {
+            document.getElementById('clear-warning-modal').style.display = 'none';
+        };
+        document.getElementById('btn-clear-continue').onclick = () => {
+            // Move from warning modal to the type-CLEAR final modal
+            document.getElementById('clear-warning-modal').style.display = 'none';
+            const input = document.getElementById('clear-typed-confirmation');
+            input.value = '';
+            document.getElementById('clear-typed-error').style.display = 'none';
+            document.getElementById('btn-clear-execute').disabled = true;
+            document.getElementById('clear-confirm-modal').style.display = 'flex';
+            setTimeout(() => input.focus(), 100);
+        };
+        document.getElementById('btn-clear-cancel-2').onclick = () => {
+            document.getElementById('clear-confirm-modal').style.display = 'none';
+        };
+        // Enable Delete button only when user types the exact word CLEAR (case-sensitive)
+        document.getElementById('clear-typed-confirmation').oninput = (e) => {
+            const ok = e.target.value === 'CLEAR';
+            document.getElementById('btn-clear-execute').disabled = !ok;
+            document.getElementById('clear-typed-error').style.display = ok ? 'none' : 'none';
+        };
+        document.getElementById('btn-clear-execute').onclick = () => self.executeClearData();
     },
 
     filterItemsByCategory(selectEl) {
@@ -843,6 +868,67 @@ const app = {
         a.download = `Stock_Report_${new Date().toISOString().split('T')[0]}.xls`;
         a.click();
         URL.revokeObjectURL(url);
+    },
+
+    // ============ CLEAR ALL STOCK DATA (two-step verification) ============
+    async clearStockData() {
+        // First, ensure we know how many rows we're about to wipe, so the
+        // admin sees a real number in the warning modal.
+        await this.loadEntries();
+        const count = this.entries.length;
+        document.getElementById('clear-warning-details').innerHTML = `
+            You are about to permanently delete
+            <strong style="color:#ef4444;">${count} stock movement${count === 1 ? '' : 's'}</strong>
+            from the database.
+            <br><br>
+            This will affect:
+            <ul style="margin-top:0.5rem;padding-left:1.25rem;">
+                <li>Every Issue entry (incl. PPE & Consumables, old stock returns)</li>
+                <li>Every Arrival entry (incoming new stock)</li>
+                <li>The Stock Levels report in any future Excel exports</li>
+            </ul>
+            <br>
+            <em>This only touches stock movements. Team leader accounts, employee rosters, and admin access are NOT affected.</em>
+        `;
+        document.getElementById('clear-warning-modal').style.display = 'flex';
+    },
+
+    async executeClearData() {
+        const executeBtn = document.getElementById('btn-clear-execute');
+        executeBtn.disabled = true;
+        executeBtn.textContent = 'Deleting…';
+
+        try {
+            // Delete in two passes so we don't blow past URL/size limits.
+            const pass = async (col) => {
+                let lastError = null;
+                while (true) {
+                    const { error } = await db.from(col).delete().neq('id', '00000000-0000-0000-0000-000000000000').limit(500).select();
+                    if (error) { lastError = error; break; }
+                    if (!error) break; // safety
+                }
+                return lastError;
+            };
+
+            // Only delete stock movements. Employees / team leaders / admin are preserved.
+            const { error: err1 } = await db.from('stock_entries').delete().gte('created_at', '1970-01-01');
+
+            document.getElementById('clear-confirm-modal').style.display = 'none';
+
+            if (err1) {
+                alert('Some data could not be deleted: ' + err1.message);
+            } else {
+                await this.loadEntries();
+                alert('All stock data has been permanently deleted.');
+                const infoEl = document.getElementById('clear-data-info');
+                if (infoEl) infoEl.innerHTML = 'Last cleared: ' + new Date().toLocaleString();
+            }
+        } catch (e) {
+            alert('Clear failed: ' + e.message);
+        } finally {
+            executeBtn.disabled = false;
+            executeBtn.textContent = 'Permanently Delete All Data';
+        }
     }
 };
 
