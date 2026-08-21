@@ -1,9 +1,9 @@
 // ============== SUPABASE CONFIG ==============
-const SUPABASE_URL = 'https://okbscacqmsvmvmtewrlh.supabase.co/rest/v1/';
+const SUPABASE_URL = 'https://okbscacqmsvmvmtewrlh.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_g0Xk99hRIBJEkovLLRxaig_57-3ibRH';
 
 // Initialize Supabase client (loaded from CDN as a global)
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ============== APP STATE ==============
 const app = {
@@ -51,14 +51,14 @@ const app = {
             document.getElementById('login-error').style.color = '#94a3b8';
 
             // First, sanity check that Supabase is reachable
-            if (!supabase) {
+            if (!db) {
                 hideError();
                 showError('Supabase is not loaded. Check your internet connection.');
                 return;
             }
 
             try {
-                const { data, error } = await supabase
+                const { data, error } = await db
                     .from('users')
                     .select('*')
                     .eq('username', username)
@@ -101,7 +101,7 @@ const app = {
             const pass = document.getElementById('leader-pass').value;
             const subsection = document.getElementById('leader-subsection').value;
 
-            const { error } = await supabase.from('users').insert([{
+            const { error } = await db.from('users').insert([{
                 username, name, password: pass, role: 'leader', subsection
             }]);
 
@@ -132,7 +132,7 @@ const app = {
         document.getElementById('add-employee-form').onsubmit = async (e) => {
             e.preventDefault();
             const name = document.getElementById('employee-name').value;
-            const { error } = await supabase.from('employees').insert([{
+            const { error } = await db.from('employees').insert([{
                 name,
                 subsection: this.currentUser.subsection,
                 leader_id: this.currentUser.id
@@ -148,7 +148,7 @@ const app = {
             if (e.target.classList.contains('remove-emp')) {
                 const id = e.target.dataset.id;
                 if (!confirm('Remove this employee?')) return;
-                await supabase.from('employees').delete().eq('id', id);
+                await db.from('employees').delete().eq('id', id);
                 await this.loadEmployees();
                 this.renderLeaderView();
             }
@@ -194,23 +194,23 @@ const app = {
     },
 
     async loadUsers() {
-        const { data } = await supabase.from('users').select('*').eq('role', 'leader').order('created_at', { ascending: true });
+        const { data } = await db.from('users').select('*').eq('role', 'leader').order('created_at', { ascending: true });
         this.users = data || [];
     },
 
     async loadEmployees() {
-        const { data } = await supabase.from('employees').select('*');
+        const { data } = await db.from('employees').select('*');
         this.employees = data || [];
     },
 
     async loadEntries() {
-        const { data } = await supabase.from('stock_entries').select('*');
+        const { data } = await db.from('stock_entries').select('*');
         this.entries = data || [];
     },
 
     async deleteUser(username) {
         if (!confirm('Delete this team leader?')) return;
-        await supabase.from('users').delete().eq('username', username);
+        await db.from('users').delete().eq('username', username);
         await this.loadUsers();
         this.renderAdminView();
     },
@@ -299,7 +299,7 @@ const app = {
         const received = parseInt(document.getElementById('check-received').checked ? document.getElementById('amount-received').value : 0);
         const notes = document.getElementById('notes').value;
 
-        const { error } = await supabase.from('stock_entries').insert([{
+        const { error } = await db.from('stock_entries').insert([{
             subsection: this.currentUser.subsection,
             leader_id: this.currentUser.id,
             leader_name: this.currentUser.name,
