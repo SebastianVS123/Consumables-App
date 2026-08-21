@@ -85,14 +85,15 @@
                             Export all stock movements to a formatted Excel file.
                         </p>
                         <button onclick="app.exportData()">DOWNLOAD EXCEL SHEET</button>
-
+                        <button onclick="app.showSafeSignaturesGallery()" class="secondary" style="margin-top: 0.5rem; width: 100%;">
+                            📸 VIEW EMPLOYEE SIGNATURES
+                        </button>
                         <hr style="margin: 1.5rem 0; border: none; border-top: 1px solid var(--border-color);">
-
                         <p style="color: var(--danger-color); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; margin-bottom: 0.5rem;">
                             ⚠️ Danger Zone
                         </p>
                         <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.75rem;">
-                            Permanently delete <strong>all stock data</strong>. Requires two-step verification. Cannot be undone.
+                            Permanently delete all stock data. Requires two-step verification. Cannot be undone.
                         </p>
                         <button id="btn-clear-data" onclick="app.clearStockData()" style="background-color: var(--danger-color);">
                             CLEAR ALL STOCK DATA
@@ -105,7 +106,7 @@
             </div>
         </div>
 
-        <!-- =========== HUB VIEW =========== -->
+        <!-- =========== HUB VIEW (Team leader entry point) =========== -->
         <div id="hub-view" class="container hidden">
             <header>
                 <div class="header-info">
@@ -114,17 +115,15 @@
                 </div>
                 <button onclick="app.logout()" class="secondary" style="width: auto;">SIGN OUT</button>
             </header>
-
             <div class="hub-grid">
                 <div class="card hub-card" onclick="app.showIssuePage()">
                     <div class="hub-icon">📤</div>
                     <h2 class="card-title">Issue Consumables or PPE</h2>
                     <p style="color: var(--text-secondary); font-size: 0.85rem;">
-                        Record stock that is being given out to an employee on your shift.
+                        Record stock that is being given out to an employee.
                     </p>
                     <button type="button" style="margin-top:1rem;">ISSUE STOCK</button>
                 </div>
-
                 <div class="card hub-card" onclick="app.showArrivalPage()">
                     <div class="hub-icon">📥</div>
                     <h2 class="card-title">Log Arriving Stock</h2>
@@ -132,6 +131,51 @@
                         Record new stock that arrived — purchase, transfer in, supplier delivery.
                     </p>
                     <button type="button" style="margin-top:1rem;">LOG ARRIVAL</button>
+                </div>
+                <div class="card hub-card" onclick="app.openSignatureUpload()">
+                    <div class="hub-icon">📷</div>
+                    <h2 class="card-title">Upload Employee Signatures</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem;">
+                        Capture or upload a photo of your employees' signed issue list.
+                    </p>
+                    <button type="button" style="margin-top:1rem;">UPLOAD SIGNATURES</button>
+                </div>
+            </div>
+            <!-- Hidden file input that triggers camera/gallery on mobile -->
+            <input type="file" id="signature-file-input" accept="image/*" capture="environment" style="display: none;">
+        </div>
+
+        <!-- =========== SIGNATURE UPLOAD VIEW =========== -->
+        <div id="signature-view" class="container hidden">
+            <header>
+                <div class="header-info">
+                    <h1 id="signature-title">Upload Signatures</h1>
+                    <p>Team leader: <span id="signature-leader-name">—</span></p>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                    <button onclick="app.cancelSignatureUpload()" class="secondary" style="width:auto;">← HUB</button>
+                    <button onclick="app.logout()" class="secondary" style="width:auto;">SIGN OUT</button>
+                </div>
+            </header>
+            <div class="dashboard-grid single-col">
+                <div class="card">
+                    <h2 class="card-title">📷 Signature Photo Preview</h2>
+                    <div id="signature-preview-container" style="text-align:center; padding: 1rem; background: var(--input-bg); border-radius: 0.5rem; min-height: 200px; display: flex; align-items: center; justify-content: center;">
+                        <p style="color: var(--text-secondary);">No photo selected yet.</p>
+                    </div>
+                    <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 1rem;">
+                        Take a photo with your camera, or choose one from your gallery.
+                    </p>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label>NOTES (OPTIONAL)</label>
+                        <textarea id="signature-notes" placeholder="e.g. Morning shift, signed by 5 employees" rows="2"></textarea>
+                    </div>
+                    <button type="button" id="btn-submit-signature" style="background-color: var(--accent-color);" disabled>
+                        📤 SUBMIT SIGNATURE
+                    </button>
+                    <button type="button" onclick="document.getElementById('signature-file-input').click()" class="secondary" style="margin-top: 0.5rem;">
+                        📁 Choose Photo Again
+                    </button>
                 </div>
             </div>
         </div>
@@ -148,7 +192,6 @@
                     <button onclick="app.logout()" class="secondary" style="width:auto;">SIGN OUT</button>
                 </div>
             </header>
-
             <div class="dashboard-grid">
                 <div class="main-form">
                     <div class="card">
@@ -159,11 +202,7 @@
                                 <select id="allocate-employee" required>
                                     <option value="">No employees added yet</option>
                                 </select>
-                                <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                                    Add the people on your shift in the roster panel first.
-                                </p>
                             </div>
-
                             <div class="form-group">
                                 <label>WHAT ARE YOU ISSUING?</label>
                                 <div class="toggle-group">
@@ -171,20 +210,16 @@
                                     <button type="button" class="toggle-btn" data-type="CONSUMABLES">CONSUMABLES</button>
                                 </div>
                             </div>
-
                             <div class="form-group">
                                 <label>ITEM</label>
-                                <!-- This dropdown is populated dynamically by script.js -->
                                 <select id="item-select" required>
                                     <option value="">Loading…</option>
                                 </select>
                             </div>
-
                             <div id="other-item-container" class="form-group hidden">
                                 <label>SPECIFY OTHER ITEM</label>
                                 <input type="text" id="other-item-text">
                             </div>
-
                             <div class="amount-grid">
                                 <div class="form-group" style="margin-bottom: 0;">
                                     <label>AMOUNT ISSUED <span style="font-weight:400;color:var(--text-secondary);font-size:0.7rem;">(new stock)</span></label>
@@ -198,17 +233,14 @@
                             <p id="stock-hint" style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
                                 &nbsp;
                             </p>
-
                             <div class="form-group" style="margin-top: 1.5rem;">
                                 <label>NOTES (OPTIONAL)</label>
                                 <textarea id="notes" placeholder="Job number, reason…" rows="2"></textarea>
                             </div>
-
                             <button type="submit">SUBMIT</button>
                         </form>
                     </div>
                 </div>
-
                 <div class="side-panels">
                     <div class="card">
                         <h2 class="card-title">My Shift Employees</h2>
@@ -223,7 +255,6 @@
                             <li>No employees added yet.</li>
                         </ul>
                     </div>
-
                     <div class="card">
                         <h2 class="card-title">Your Recent Entries</h2>
                         <div id="recent-entries" style="font-size: 0.875rem; color: var(--text-secondary);">
@@ -234,7 +265,7 @@
             </div>
         </div>
 
-        <!-- =========== ARRIVAL VIEW (NO employee allocation) =========== -->
+        <!-- =========== ARRIVAL VIEW =========== -->
         <div id="arrival-view" class="container hidden">
             <header>
                 <div class="header-info">
@@ -246,7 +277,6 @@
                     <button onclick="app.logout()" class="secondary" style="width:auto;">SIGN OUT</button>
                 </div>
             </header>
-
             <div class="dashboard-grid single-col">
                 <div class="main-form">
                     <div class="card">
@@ -262,35 +292,58 @@
                                     <button type="button" class="toggle-btn" data-type="CONSUMABLES">CONSUMABLES</button>
                                 </div>
                             </div>
-
                             <div class="form-group">
                                 <label>ITEM</label>
-                                <!-- This dropdown is populated dynamically by script.js -->
                                 <select id="arrival-item-select" required>
                                     <option value="">Loading…</option>
                                 </select>
                             </div>
-
                             <div id="arrival-other-item-container" class="form-group hidden">
                                 <label>SPECIFY OTHER ITEM</label>
                                 <input type="text" id="arrival-other-item-text">
                             </div>
-
                             <div class="form-group">
                                 <label>AMOUNT RECEIVED</label>
                                 <input type="number" id="arrival-amount" value="0" min="0">
                             </div>
-
                             <div class="form-group">
                                 <label>NOTES (OPTIONAL) — Supplier, waybill number…</label>
                                 <textarea id="arrival-notes" placeholder="Supplier, waybill number…" rows="2"></textarea>
                             </div>
-
                             <button type="submit">SUBMIT ARRIVAL</button>
                         </form>
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- =========== SIGNATURES GALLERY (admin) =========== -->
+        <div id="signatures-gallery-view" class="container hidden">
+            <header>
+                <div class="header-info">
+                    <h1>Employee Signatures</h1>
+                    <p>Browse all signature photos uploaded by team leaders.</p>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                    <button onclick="app.renderAdminView()" class="secondary" style="width:auto;">← ADMIN</button>
+                    <button onclick="app.logout()" class="secondary" style="width:auto;">SIGN OUT</button>
+                </div>
+            </header>
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                    <h2 class="card-title" style="margin-bottom: 0;">Saved Signatures <span id="signature-count" style="font-weight: 400; color: var(--text-secondary); font-size: 0.85rem;"></span></h2>
+                    <input type="text" id="signature-search" placeholder="Filter by leader/dept…" style="max-width: 260px;">
+                </div>
+                <div id="signatures-gallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem;">
+                    <p style="color: var(--text-secondary); grid-column: 1 / -1; padding:1rem 0;">Loading…</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== IMAGE LIGHTBOX =========== -->
+        <div id="signature-image-modal" class="modal" style="background: rgba(0,0,0,0.9);">
+            <button class="secondary" onclick="document.getElementById('signature-image-modal').style.display='none'" style="position: absolute; top: 1rem; right: 1rem; z-index: 1;">✕ Close</button>
+            <img id="signature-full-image" src="" alt="Signature" style="max-width: 95vw; max-height: 92vh; border-radius: 0.5rem; object-fit: contain;">
         </div>
 
         <!-- =========== CONFIRMATION MODAL =========== -->
@@ -334,7 +387,7 @@
         <div id="override-modal" class="modal">
             <div class="modal-content" style="border: 2px solid var(--danger-color);">
                 <h2 style="margin-bottom: 1rem; color: var(--danger-color);">📝 Override Reason Required</h2>
-                <p style="margin-bottom: 1rem;">You are issuing more consumables than what you received back from the employee. Please provide a reason why you are issuing more than you are receiving.</p>
+                <p style="margin-bottom: 1rem;">You are issuing more consumables than what you received back from the employee. Please provide a reason.</p>
                 <div class="form-group">
                     <label>REASON FOR OVERRIDE (REQUIRED)</label>
                     <textarea id="override-reason" rows="3" placeholder="e.g. New employee has no prior issued stock, damaged stock previously reported, etc."></textarea>
@@ -346,7 +399,7 @@
             </div>
         </div>
 
-        <!-- =========== CLEAR DATA MODALS (two-step verification) =========== -->
+        <!-- =========== CLEAR DATA MODALS =========== -->
         <div id="clear-warning-modal" class="modal">
             <div class="modal-content" style="border: 2px solid var(--danger-color);">
                 <h2 style="margin-bottom: 1rem; color: var(--danger-color);">⚠️ Clear All Stock Data</h2>
@@ -358,16 +411,12 @@
                 </div>
             </div>
         </div>
-
         <div id="clear-confirm-modal" class="modal">
             <div class="modal-content" style="border: 2px solid var(--danger-color);">
                 <h2 style="margin-bottom: 1rem; color: var(--danger-color);">🔒 Final Verification</h2>
-                <p style="margin-bottom: 1rem;">To confirm, type the word <strong style="font-family:monospace;background:rgba(255,255,255,0.1);padding:0.1rem 0.4rem;border-radius:0.25rem;">CLEAR</strong> exactly:</p>
+                <p style="margin-bottom: 1rem;">Type the word <strong style="font-family:monospace;background:rgba(255,255,255,0.1);padding:0.1rem 0.4rem;border-radius:0.25rem;">CLEAR</strong> exactly:</p>
                 <div class="form-group">
                     <input type="text" id="clear-typed-confirmation" placeholder="Type CLEAR to confirm" autocomplete="off">
-                    <p id="clear-typed-error" style="color: var(--danger-color); font-size: 0.75rem; margin-top: 0.5rem; display: none;">
-                        You must type CLEAR exactly (in capital letters) to proceed.
-                    </p>
                 </div>
                 <div class="modal-actions">
                     <button id="btn-clear-cancel-2" class="secondary">Cancel</button>
@@ -380,6 +429,5 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="script.js"></script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2e84919a91ff4f0',t:'MTc4NzMwMTEyOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2e8ad46bcf185c8',t:'MTc4NzMwNTIzMg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
-
