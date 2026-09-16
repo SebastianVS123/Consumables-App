@@ -3,7 +3,7 @@ const SUPABASE_URL = 'https://okbscacqmsvmvmtewrlh.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rYnNjYWNxbXN2bXZtdGV3cmxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzE3NjAsImV4cCI6MjEwMjgwNzc2MH0.uf30y8ce13VoIUTB1eyfurxellJa0sShsXeb335AnQI'; // <-- paste your eyJ... key here
 
 // ============== ITEM CATALOG ==============
-const ITEM_CATALOG = [
+const DEFAULT_ITEM_CATALOG = [
     { value: 'Shirts',      label: 'Shirts',      category: 'PPE' },
     { value: 'Pants',       label: 'Pants',       category: 'PPE' },
     { value: 'Reflectors',  label: 'Reflectors',  category: 'PPE' },
@@ -16,12 +16,22 @@ const ITEM_CATALOG = [
     { value: 'Other',       label: 'Other',       category: 'BOTH' }
 ];
 
+let ITEM_CATALOG = DEFAULT_ITEM_CATALOG.slice();
+
+function escapeHtml(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 function populateItemDropdown(selectId, category) {
     const sel = document.getElementById(selectId);
     if (!sel) return;
     const previousValue = sel.value;
     const filtered = ITEM_CATALOG.filter(i => i.category === category || i.category === 'BOTH');
-    sel.innerHTML = filtered.map(i => `<option value="${i.value}">${i.label}</option>`).join('');
+    sel.innerHTML = filtered.map(i => `<option value="${escapeHtml(i.value)}">${escapeHtml(i.label)}</option>`).join('');
     if (filtered.some(i => i.value === previousValue)) sel.value = previousValue;
 }
 
@@ -54,7 +64,10 @@ const app = {
     entries: [],
     users: [],
     signatures: [],
+    attendance: [],
+    stockItems: [],
     _pendingSignatureFile: null,
+    _submittingSignature: false,
 
     async init() {
         try {
@@ -68,6 +81,7 @@ const app = {
             return;
         }
         this.setupEventListeners();
+        await this.loadStockItems();
         const session = sessionStorage.getItem('current_user');
         if (session) {
             try {
@@ -133,6 +147,15 @@ const app = {
             await self.loadUsers();
             self.renderAdminView();
         };
+
+        // ADMIN: Add stock item
+        const addItemForm = document.getElementById('add-stock-item-form');
+        if (addItemForm) {
+            addItemForm.onsubmit = async function (e) {
+                e.preventDefault();
+                await self.addStockItem();
+            };
+        }
 
         // PPE / CONSUMABLES toggle
         document.querySelectorAll('.toggle-btn').forEach(btn => {
@@ -257,18 +280,23 @@ const app = {
         };
         document.getElementById('btn-clear-execute').onclick = () => self.executeClearData();
 
-        // Signature file input preview
+        // Signature file input preview — save the file immediately so Submit always has it
         const sigInput = document.getElementById('signature-file-input');
         if (sigInput) {
             sigInput.addEventListener('change', (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
+                self._pendingSignatureFile = file;
+                const btn = document.getElementById('btn-submit-signature');
+                if (btn) btn.disabled = false;
                 const reader = new FileReader();
                 reader.onload = (ev) => {
-                    self._pendingSignatureFile = file;
                     document.getElementById('signature-preview-container').innerHTML =
-                        `<img src="${ev.target.result}" style="max-width: 100%; max-height: 60vh; border-radius: 0.375rem;">`;
-                    document.getElementById('btn-submit-signature').disabled = false;
+                        `<img src="${ev.target.result}" alt="Preview" style="max-width: 100%; max-height: 60vh; border-radius: 0.375rem;">`;
+                };
+                reader.onerror = () => {
+                    document.getElementById('signature-preview-container').innerHTML =
+                        `<p style="color: var(--success-color);">Photo selected: ${escapeHtml(file.name)}. Tap Submit to upload.</p>`;
                 };
                 reader.readAsDataURL(file);
             });
@@ -279,11 +307,23 @@ const app = {
         if (sigSearch) {
             sigSearch.addEventListener('input', () => self.renderSignaturesGallery());
         }
+
+        // Attendance row buttons (event delegation — safe with any employee name)
+        const attList = document.getElementById('attendance-list');
+        if (attList) {
+            attList.addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-att-status]');
+                if (!btn) return;
+                const name = btn.getAttribute('data-emp-name');
+                const status = btn.getAttribute('data-att-status');
+                if (name && status) self.markAttendance(name, status);
+            });
+        }
     },
 
     // ============ VIEW SWITCHING ============
     hideAllViews() {
-        ['login-view', 'admin-view', 'hub-view', 'leader-view', 'arrival-view', 'signature-view', 'signatures-gallery-view'].forEach(id => {
+        ['login-view', 'admin-view', 'hub-view', 'leader-view', 'arrival-view', 'signature-view', 'signatures-gallery-view', 'attendance-view', 'stock-items-view', 'stocktake-view'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.classList.add('hidden');
         });
@@ -309,58 +349,105 @@ const app = {
             `<p style="color: var(--text-secondary);">No photo selected yet.</p>`;
         document.getElementById('signature-notes').value = '';
         document.getElementById('btn-submit-signature').disabled = true;
+        document.getElementById('btn-submit-signature').textContent = '📤 SUBMIT SIGNATURE';
         this._pendingSignatureFile = null;
-        document.getElementById('signature-file-input').value = '';
-        document.getElementById('signature-file-input').click();
+        this._submittingSignature = false;
+        const input = document.getElementById('signature-file-input');
+        input.value = '';
+        setTimeout(() => input.click(), 150);
     },
 
     cancelSignatureUpload() {
         this._pendingSignatureFile = null;
+        this._submittingSignature = false;
         document.getElementById('signature-file-input').value = '';
         this.showHub();
     },
 
+    async prepareImageFile(file) {
+        try {
+            const dataUrl = await new Promise((res, rej) => {
+                const r = new FileReader();
+                r.onload = () => res(r.result);
+                r.onerror = rej;
+                r.readAsDataURL(file);
+            });
+            const img = await new Promise((res, rej) => {
+                const i = new Image();
+                i.onload = () => res(i);
+                i.onerror = rej;
+                i.src = dataUrl;
+            });
+            const maxW = 1600;
+            let w = img.width, h = img.height;
+            if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.82));
+            if (!blob) return file;
+            const base = (file.name || 'signature').replace(/\.[^.]+$/, '') || 'signature';
+            return new File([blob], base + '.jpg', { type: 'image/jpeg' });
+        } catch (e) {
+            return file;
+        }
+    },
+
     async submitSignature() {
+        if (this._submittingSignature) return;
         const file = this._pendingSignatureFile;
-        if (!file) return alert('Choose a photo first.');
+        if (!file) {
+            alert('Choose a photo first.');
+            document.getElementById('signature-file-input').click();
+            return;
+        }
 
         const btn = document.getElementById('btn-submit-signature');
+        this._submittingSignature = true;
         btn.disabled = true;
         const original = btn.textContent;
         btn.textContent = 'Uploading…';
 
         try {
-            const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-            const path = `${this.currentUser.subsection}/${this.currentUser.username}-${Date.now()}.${ext}`;
+            const ready = await this.prepareImageFile(file);
+            const ext = (ready.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+            const safeUser = String(this.currentUser.username || 'leader').replace(/[^a-z0-9_-]/gi, '_');
+            const safeSub = String(this.currentUser.subsection || 'dept').replace(/[^a-z0-9_-]/gi, '_');
+            const path = `${safeSub}/${safeUser}-${Date.now()}.${ext}`;
 
-            // 1. Upload to Storage
             const { error: upErr } = await db.storage
                 .from('signatures')
-                .upload(path, file, { upsert: false, contentType: file.type || 'image/jpeg' });
+                .upload(path, ready, { upsert: false, contentType: ready.type || 'image/jpeg' });
             if (upErr) throw upErr;
 
-            // 2. Get the public URL
             const { data: urlData } = db.storage.from('signatures').getPublicUrl(path);
             if (!urlData || !urlData.publicUrl) throw new Error('Failed to get public URL.');
 
-            // 3. Save metadata in employee_signatures table
-            const { error: metaErr } = await db.from('employee_signatures').insert([{
+            const meta = {
                 leader_id: this.currentUser.id || null,
                 leader_name: this.currentUser.name,
-                leader_username: this.currentUser.username,
                 subsection: this.currentUser.subsection,
                 notes: document.getElementById('signature-notes').value.trim(),
                 storage_path: path,
-                public_url: urlData.publicUrl
-            }]);
+                public_url: urlData.publicUrl,
+                leader_username: this.currentUser.username
+            };
+
+            let { error: metaErr } = await db.from('employee_signatures').insert([meta]);
+            if (metaErr && /leader_username/i.test(metaErr.message || '')) {
+                delete meta.leader_username;
+                ({ error: metaErr } = await db.from('employee_signatures').insert([meta]));
+            }
             if (metaErr) throw metaErr;
 
             alert('Signature photo uploaded successfully.');
             this.cancelSignatureUpload();
         } catch (err) {
-            alert('Upload failed: ' + err.message);
+            alert('Upload failed: ' + (err.message || err));
             btn.disabled = false;
             btn.textContent = original;
+            this._submittingSignature = false;
         }
     },
 
@@ -432,12 +519,320 @@ const app = {
         }).join('');
     },
 
+    // ============ ATTENDANCE ============
+    getTodayString() {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    },
+
+    async loadAttendance() {
+        const today = this.getTodayString();
+        const { data, error } = await db
+            .from('attendance')
+            .select('*')
+            .eq('leader_username', this.currentUser.username)
+            .eq('log_date', today);
+        if (error) {
+            alert('Could not load attendance: ' + error.message + '\n\nIf the attendance table is missing, run the Attendance SQL in Supabase first.');
+            this.attendance = [];
+            return;
+        }
+        this.attendance = data || [];
+    },
+
+    async showAttendancePage() {
+        this.hideAllViews();
+        document.getElementById('attendance-view').classList.remove('hidden');
+        document.getElementById('attendance-title').textContent = `${this.currentUser.subsection} — Attendance`;
+        document.getElementById('attendance-leader-name').textContent = this.currentUser.name;
+        document.getElementById('attendance-date').textContent = '· ' + new Date().toLocaleDateString();
+        await this.loadEmployees();
+        await this.loadAttendance();
+        this.renderAttendancePage();
+    },
+
+    renderAttendancePage() {
+        const container = document.getElementById('attendance-list');
+        const employees = this.employees.filter(e => e.subsection === this.currentUser.subsection);
+        const byName = {};
+        this.attendance.forEach(a => { byName[a.employee_name] = a.status; });
+        const marked = employees.filter(e => byName[e.name]).length;
+        document.getElementById('attendance-marked-count').textContent = `(${marked}/${employees.length} marked)`;
+
+        if (employees.length === 0) {
+            container.innerHTML = `<p style="color: var(--text-secondary); padding: 1rem 0;">No employees added yet. Go to Issue Stock and add the people on your shift first.</p>`;
+            return;
+        }
+
+        const statusLabel = (s) => {
+            if (s === 'on_time') return 'On Time';
+            if (s === 'late') return 'Late';
+            if (s === 'absent') return 'Absent';
+            return 'Not marked yet';
+        };
+
+        container.innerHTML = employees.map(emp => {
+            const status = byName[emp.name] || '';
+            const nameAttr = escapeHtml(emp.name);
+            return `
+                <div class="attendance-row">
+                    <div>
+                        <strong>${nameAttr}</strong>
+                        <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.2rem;">
+                            ${status ? 'Marked: ' + statusLabel(status) : 'Not marked yet'}
+                        </div>
+                    </div>
+                    <div class="attendance-actions">
+                        <button type="button" data-emp-name="${nameAttr}" data-att-status="on_time" class="${status === 'on_time' ? 'att-active ontime' : 'secondary'}">On Time</button>
+                        <button type="button" data-emp-name="${nameAttr}" data-att-status="late" class="${status === 'late' ? 'att-active late' : 'secondary'}">Late</button>
+                        <button type="button" data-emp-name="${nameAttr}" data-att-status="absent" class="${status === 'absent' ? 'att-active absent' : 'secondary'}">Absent</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    },
+
+    async markAttendance(employeeName, status) {
+        const today = this.getTodayString();
+        const payload = {
+            employee_name: employeeName,
+            subsection: this.currentUser.subsection,
+            leader_username: this.currentUser.username,
+            status,
+            log_date: today,
+            marked_at: new Date().toISOString()
+        };
+        const { error } = await db.from('attendance').upsert(payload, { onConflict: 'leader_username,employee_name,log_date' });
+        if (error) return alert('Could not save attendance: ' + error.message);
+        await this.loadAttendance();
+        this.renderAttendancePage();
+    },
+
+    async markAllAttendance(status) {
+        const employees = this.employees.filter(e => e.subsection === this.currentUser.subsection);
+        if (employees.length === 0) return alert('No employees to mark.');
+        if (!confirm(`Mark all ${employees.length} operators as On Time?`)) return;
+        for (const emp of employees) {
+            const { error } = await db.from('attendance').upsert({
+                employee_name: emp.name,
+                subsection: this.currentUser.subsection,
+                leader_username: this.currentUser.username,
+                status,
+                log_date: this.getTodayString(),
+                marked_at: new Date().toISOString()
+            }, { onConflict: 'leader_username,employee_name,log_date' });
+            if (error) return alert('Could not save attendance: ' + error.message);
+        }
+        await this.loadAttendance();
+        this.renderAttendancePage();
+    },
+
+    exportAttendance() {
+        const employees = this.employees.filter(e => e.subsection === this.currentUser.subsection);
+        const byName = {};
+        this.attendance.forEach(a => { byName[a.employee_name] = a.status; });
+        const statusLabel = (s) => s === 'on_time' ? 'On Time' : s === 'late' ? 'Late' : s === 'absent' ? 'Absent' : 'Not marked';
+        const today = this.getTodayString();
+        let csv = 'Date,Department,Team Leader,Employee,Status\n';
+        employees.forEach(emp => {
+            csv += `"${today}","${this.currentUser.subsection}","${this.currentUser.name}","${emp.name}","${statusLabel(byName[emp.name])}"\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Attendance_${this.currentUser.subsection}_${today}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    },
+
+    // ============ STOCK ITEMS (admin custom dropdowns) ============
+    async loadStockItems() {
+        try {
+            const { data, error } = await db.from('stock_items').select('*').order('sort_order', { ascending: true });
+            if (error) throw error;
+            if (!data || data.length === 0) {
+                await this.seedDefaultStockItems();
+                return;
+            }
+            this.stockItems = data;
+            ITEM_CATALOG = data.map(i => ({ value: i.name, label: i.name, category: i.category, id: i.id }));
+            if (!ITEM_CATALOG.some(i => i.value === 'Other')) {
+                ITEM_CATALOG.push({ value: 'Other', label: 'Other', category: 'BOTH' });
+            }
+        } catch (e) {
+            console.warn('stock_items table not ready, using default catalog.', e);
+            ITEM_CATALOG = DEFAULT_ITEM_CATALOG.slice();
+            this.stockItems = [];
+        }
+    },
+
+    async seedDefaultStockItems() {
+        const rows = DEFAULT_ITEM_CATALOG.map((i, idx) => ({
+            name: i.value,
+            category: i.category,
+            sort_order: idx + 1
+        }));
+        const { error } = await db.from('stock_items').insert(rows);
+        if (error && !/duplicate/i.test(error.message || '')) {
+            console.warn('Could not seed stock items:', error.message);
+        }
+        const { data } = await db.from('stock_items').select('*').order('sort_order', { ascending: true });
+        this.stockItems = data || [];
+        if (this.stockItems.length) {
+            ITEM_CATALOG = this.stockItems.map(i => ({ value: i.name, label: i.name, category: i.category, id: i.id }));
+        }
+    },
+
+    async showStockItemsPage() {
+        this.hideAllViews();
+        document.getElementById('stock-items-view').classList.remove('hidden');
+        await this.loadStockItems();
+        this.renderStockItemsTable();
+    },
+
+    renderStockItemsTable() {
+        const tbody = document.querySelector('#stock-items-table tbody');
+        if (!tbody) return;
+        const items = this.stockItems.length
+            ? this.stockItems
+            : ITEM_CATALOG.map(i => ({ name: i.value, category: i.category, id: i.id || null }));
+        tbody.innerHTML = items.map(i => {
+            const isOther = i.name === 'Other';
+            const idAttr = i.id ? String(i.id) : '';
+            return `<tr>
+                <td>${escapeHtml(i.name)}</td>
+                <td>${escapeHtml(i.category)}</td>
+                <td>${isOther ? '<span style="color:var(--text-secondary);font-size:0.75rem;">Locked</span>' : `<button type="button" class="secondary" style="padding:0.25rem 0.5rem;font-size:0.75rem;width:auto;" onclick="app.deleteStockItem('${idAttr}', ${JSON.stringify(i.name)})">Delete</button>`}</td>
+            </tr>`;
+        }).join('');
+    },
+
+    async addStockItem() {
+        const name = document.getElementById('new-item-name').value.trim();
+        const category = document.getElementById('new-item-category').value;
+        if (!name) return alert('Type an item name.');
+        if (ITEM_CATALOG.some(i => i.value.toLowerCase() === name.toLowerCase())) {
+            return alert('That item already exists.');
+        }
+        const sort_order = (this.stockItems.length || ITEM_CATALOG.length) + 1;
+        const { error } = await db.from('stock_items').insert([{ name, category, sort_order }]);
+        if (error) {
+            alert('Could not add item: ' + error.message + '\n\nIf the stock_items table is missing, run the SQL in the instructions first.');
+            return;
+        }
+        document.getElementById('new-item-name').value = '';
+        await this.loadStockItems();
+        this.renderStockItemsTable();
+        alert('Item added. Team leaders will see it in the dropdowns.');
+    },
+
+    async deleteStockItem(id, name) {
+        if (name === 'Other') return alert('The Other option cannot be deleted.');
+        if (!confirm(`Remove "${name}" from the dropdown list?\n\nPast stock records for this item are kept.`)) return;
+        let query = db.from('stock_items').delete();
+        if (id) query = query.eq('id', id);
+        else query = query.eq('name', name);
+        const { error } = await query;
+        if (error) return alert('Could not delete: ' + error.message);
+        await this.loadStockItems();
+        this.renderStockItemsTable();
+    },
+
+    // ============ STOCKTAKE (admin) ============
+    async showStocktakePage() {
+        this.hideAllViews();
+        document.getElementById('stocktake-view').classList.remove('hidden');
+        await this.loadStockItems();
+        await this.loadEntries();
+        this.renderStocktakeTable();
+    },
+
+    renderStocktakeTable() {
+        const tbody = document.querySelector('#stocktake-table tbody');
+        if (!tbody) return;
+        const items = ITEM_CATALOG.filter(i => i.value !== 'Other');
+        tbody.innerHTML = items.map((i, idx) => {
+            const current = this.computeUsableStock(i.value);
+            const colour = current >= 0 ? '#22c55e' : '#ef4444';
+            return `<tr>
+                <td>${escapeHtml(i.label)}</td>
+                <td>${escapeHtml(i.category)}</td>
+                <td style="font-weight:700;color:${colour};">${current}</td>
+                <td><input type="number" min="0" class="stocktake-count-input" data-item="${escapeHtml(i.value)}" data-category="${escapeHtml(i.category)}" data-current="${current}" value="${current}"></td>
+            </tr>`;
+        }).join('');
+    },
+
+    async submitStocktake() {
+        const inputs = document.querySelectorAll('#stocktake-table .stocktake-count-input');
+        const notes = (document.getElementById('stocktake-notes').value || '').trim();
+        const adjustments = [];
+        inputs.forEach(input => {
+            const countedRaw = input.value;
+            if (countedRaw === '' || countedRaw === null) return;
+            const counted = parseInt(countedRaw, 10);
+            if (Number.isNaN(counted) || counted < 0) return;
+            const current = parseInt(input.dataset.current, 10) || 0;
+            const diff = counted - current;
+            if (diff === 0) return;
+            const category = input.dataset.category === 'BOTH' ? 'PPE' : input.dataset.category;
+            adjustments.push({
+                item: input.dataset.item,
+                type: category,
+                counted,
+                current,
+                diff
+            });
+        });
+
+        if (adjustments.length === 0) return alert('No changes to save. Counted quantities match current usable stock.');
+
+        const summary = adjustments.map(a =>
+            `${a.item}: ${a.current} → ${a.counted} (${a.diff > 0 ? '+' : ''}${a.diff})`
+        ).join('\n');
+        if (!confirm(`Save stocktake for ${adjustments.length} item(s)?\n\n${summary}`)) return;
+
+        const btn = document.getElementById('btn-submit-stocktake');
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+
+        try {
+            const rows = adjustments.map(a => ({
+                subsection: 'Admin',
+                leader_id: this.currentUser.id || null,
+                leader_name: this.currentUser.name,
+                type: a.type,
+                item: a.item,
+                employee: null,
+                issued: a.diff < 0 ? Math.abs(a.diff) : 0,
+                received: a.diff > 0 ? a.diff : 0,
+                notes: `[STOCKTAKE] Counted ${a.counted} (was ${a.current})` + (notes ? ' | ' + notes : '')
+            }));
+            const { error } = await db.from('stock_entries').insert(rows);
+            if (error) throw error;
+            await this.loadEntries();
+            this.renderStocktakeTable();
+            document.getElementById('stocktake-notes').value = '';
+            alert('Stocktake saved. Usable stock now matches the counted quantities.');
+        } catch (err) {
+            alert('Stocktake failed: ' + (err.message || err));
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'SAVE STOCKTAKE';
+        }
+    },
+
     // ============ EXISTING VIEWS (issue / arrival / stock helpers) ============
     async showIssuePage() {
         this.hideAllViews();
         document.getElementById('leader-view').classList.remove('hidden');
         document.getElementById('view-title').textContent = `${this.currentUser.subsection} — ISSUE STOCK`;
         document.getElementById('leader-display-name').textContent = this.currentUser.name;
+        await this.loadStockItems();
         await this.loadEmployees();
         await this.loadEntries();
         this.renderSidePanels();
@@ -451,6 +846,7 @@ const app = {
         document.getElementById('arrival-view').classList.remove('hidden');
         document.getElementById('arrival-title').textContent = `${this.currentUser.subsection} — ARRIVING STOCK`;
         document.getElementById('arrival-display-name').textContent = this.currentUser.name;
+        await this.loadStockItems();
         await this.loadEntries();
         this.setActiveToggle('arrival-form', 'PPE');
         populateItemDropdown('arrival-item-select', 'PPE');
@@ -469,6 +865,7 @@ const app = {
             sessionStorage.setItem('current_user', JSON.stringify(user));
             document.getElementById('login-view').classList.add('hidden');
             document.getElementById('login-error').style.display = 'none';
+            await this.loadStockItems();
             await this.loadEmployees();
             await this.loadEntries();
             if (user.role === 'admin') { await this.loadUsers(); this.renderAdminView(); }
@@ -511,13 +908,13 @@ const app = {
         if (!this.currentUser) return;
         const subEmployees = this.employees.filter(e => e.subsection === this.currentUser.subsection);
         const empOptsHtml = subEmployees.length
-            ? subEmployees.map(e => `<option value="${e.name}">${e.name}</option>`).join('')
+            ? subEmployees.map(e => `<option value="${escapeHtml(e.name)}">${escapeHtml(e.name)}</option>`).join('')
             : '<option value="">No employees added yet</option>';
         const sel = document.getElementById('allocate-employee');
         if (sel) sel.innerHTML = empOptsHtml;
 
         const empListHtml = subEmployees.length
-            ? subEmployees.map(e => `<li style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid rgba(255,255,255,0.05);"><span>• ${e.name}</span><button class="remove-emp secondary" data-id="${e.id}" style="width:auto;padding:0.15rem 0.5rem;font-size:0.7rem;">Remove</button></li>`).join('')
+            ? subEmployees.map(e => `<li style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;border-bottom:1px solid rgba(255,255,255,0.05);"><span>• ${escapeHtml(e.name)}</span><button class="remove-emp secondary" data-id="${e.id}" style="width:auto;padding:0.15rem 0.5rem;font-size:0.7rem;">Remove</button></li>`).join('')
             : '<li>No employees added yet.</li>';
         const ul = document.getElementById('employee-list');
         if (ul) ul.innerHTML = empListHtml;
@@ -530,7 +927,7 @@ const app = {
                 if (e.issued > 0) parts.push(`<span style="color:#f97316;">📤 issued -${e.issued}</span>`);
                 if (e.received > 0) parts.push(isIssue ? `<span style="color:#94a3b8;">🗑 disposed +${e.received}</span>` : `<span style="color:#22c55e;">📦 arrived +${e.received}</span>`);
                 const action = parts.length ? parts.join(' · ') : '<span style="color:#94a3b8;">—</span>';
-                return `<div style="border-bottom:1px solid var(--border-color);padding:0.5rem 0;"><div style="display:flex;justify-content:space-between;font-weight:600;"><span>${e.item} ${e.employee ? '→ ' + e.employee : ''}</span>${action}</div><div style="font-size:0.75rem;color:#94a3b8;">${(e.type || '').toLowerCase()} · ${new Date(e.created_at).toLocaleString()}</div></div>`;
+                return `<div style="border-bottom:1px solid var(--border-color);padding:0.5rem 0;"><div style="display:flex;justify-content:space-between;font-weight:600;"><span>${escapeHtml(e.item)} ${e.employee ? '→ ' + escapeHtml(e.employee) : ''}</span>${action}</div><div style="font-size:0.75rem;color:#94a3b8;">${(e.type || '').toLowerCase()} · ${new Date(e.created_at).toLocaleString()}</div></div>`;
             }).join('')
             : 'No entries yet.';
         const recentEl = document.getElementById('recent-entries');
@@ -541,8 +938,12 @@ const app = {
         let received = 0, issued = 0;
         for (const e of this.entries) {
             if (e.item !== itemName) continue;
-            if (e.employee) issued += (e.issued || 0);
-            else received += (e.received || 0);
+            if (e.employee) {
+                issued += (e.issued || 0);
+            } else {
+                received += (e.received || 0);
+                issued += (e.issued || 0);
+            }
         }
         return received - issued;
     },
@@ -660,20 +1061,31 @@ const app = {
         const totalsByDeptItem = {};
         sortedEntries.forEach(e => {
             const deptKey = `${e.subsection}-${e.item}`;
-            if (!e.employee) totalsByDeptItem[deptKey] = (totalsByDeptItem[deptKey] || 0) + (e.received || 0);
-            else totalsByDeptItem[deptKey] = (totalsByDeptItem[deptKey] || 0) - (e.issued || 0);
+            if (!e.employee) {
+                totalsByDeptItem[deptKey] = (totalsByDeptItem[deptKey] || 0) + (e.received || 0) - (e.issued || 0);
+            } else {
+                totalsByDeptItem[deptKey] = (totalsByDeptItem[deptKey] || 0) - (e.issued || 0);
+            }
         });
         let movementRows = '';
         sortedEntries.forEach(e => {
             const deptKey = `${e.subsection}-${e.item}`;
             const isIssue = !!e.employee;
-            movementRows += `<tr><td>${e.subsection}</td><td>${new Date(e.created_at).toLocaleString()}</td><td>${e.item}</td><td>${e.type || ''}</td><td>${e.leader_name}</td><td>${e.employee || ''}</td><td style="text-align:right;">${isIssue ? (e.issued || 0) : (e.received || 0)}</td><td style="text-align:right;">${isIssue ? (e.received || 0) : 0}</td><td style="text-align:right;font-weight:bold;">${totalsByDeptItem[deptKey]}</td><td>${e.notes || ''}</td></tr>`;
+            const isStocktake = !isIssue && (e.issued || 0) > 0;
+            const movementQty = isIssue ? (e.issued || 0) : (isStocktake ? -(e.issued || 0) : (e.received || 0));
+            const allocated = isIssue ? (e.employee || '') : ((e.notes || '').indexOf('[STOCKTAKE]') === 0 ? 'STOCKTAKE' : '');
+            movementRows += `<tr><td>${e.subsection}</td><td>${new Date(e.created_at).toLocaleString()}</td><td>${e.item}</td><td>${e.type || ''}</td><td>${e.leader_name}</td><td>${allocated}</td><td style="text-align:right;">${movementQty}</td><td style="text-align:right;">${isIssue ? (e.received || 0) : 0}</td><td style="text-align:right;font-weight:bold;">${totalsByDeptItem[deptKey]}</td><td>${e.notes || ''}</td></tr>`;
         });
         const skuStats = {};
         sortedEntries.forEach(e => {
             if (!skuStats[e.item]) skuStats[e.item] = { arrived: 0, issued: 0, returned: 0 };
-            if (!e.employee) skuStats[e.item].arrived += (e.received || 0);
-            else { skuStats[e.item].issued += (e.issued || 0); skuStats[e.item].returned += (e.received || 0); }
+            if (!e.employee) {
+                skuStats[e.item].arrived += (e.received || 0);
+                skuStats[e.item].issued += (e.issued || 0);
+            } else {
+                skuStats[e.item].issued += (e.issued || 0);
+                skuStats[e.item].returned += (e.received || 0);
+            }
         });
         const sortedSkuRows = Object.entries(skuStats).sort((a, b) => a[0].localeCompare(b[0]));
         let skuRows = '';
