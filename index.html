@@ -86,6 +86,557 @@
                         </p>
                         <button onclick="app.exportData()">DOWNLOAD EXCEL SHEET</button>
                         <button onclick="app.showSafeSignaturesGallery()" class="secondary" style="margin-top: 0.5rem; width: 100%;">
+                            📸 VIEW UPLOADED PHOTOS
+                        </button>
+                        <button onclick="app.showStockItemsPage()" class="secondary" style="margin-top: 0.5rem; width: 100%;">
+                            ✏️ MANAGE STOCK ITEMS
+                        </button>
+                        <button onclick="app.showStocktakePage()" class="secondary" style="margin-top: 0.5rem; width: 100%;">
+                            📦 STOCKTAKE
+                        </button>
+                        <hr style="margin: 1.5rem 0; border: none; border-top: 1px solid var(--border-color);">
+                        <p style="color: var(--danger-color); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; margin-bottom: 0.5rem;">
+                            ⚠️ Danger Zone
+                        </p>
+                        <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.75rem;">
+                            Permanently delete all stock data. Requires two-step verification. Cannot be undone.
+                        </p>
+                        <button id="btn-clear-data" onclick="app.clearStockData()" style="background-color: var(--danger-color);">
+                            CLEAR ALL STOCK DATA
+                        </button>
+                        <p id="clear-data-info" style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                            &nbsp;
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== HUB VIEW (Team leader entry point) =========== -->
+        <div id="hub-view" class="container hidden">
+            <header>
+                <div class="header-info">
+                    <h1 id="hub-title">SUBSECTION</h1>
+                    <p>Team leader: <span id="hub-leader-name">—</span></p>
+                </div>
+                <button onclick="app.logout()" class="secondary" style="width: auto;">SIGN OUT</button>
+            </header>
+            <div class="hub-grid">
+                <div class="card hub-card" onclick="app.showAttendancePage()">
+                    <div class="hub-icon">📋</div>
+                    <h2 class="card-title">Mark Attendance</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem;">
+                        Mark each operator as <strong>On Time</strong>, <strong>Late</strong>, or <strong>Absent</strong> for today's shift.
+                    </p>
+                    <button type="button" style="margin-top:1rem;">MARK ATTENDANCE</button>
+                </div>
+                <div class="card hub-card" onclick="app.showIssuePage()">
+                    <div class="hub-icon">📤</div>
+                    <h2 class="card-title">Issue Consumables or PPE</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem;">
+                        Record stock that is being given out to an employee.
+                    </p>
+                    <button type="button" style="margin-top:1rem;">ISSUE STOCK</button>
+                </div>
+                <div class="card hub-card" onclick="app.showArrivalPage()">
+                    <div class="hub-icon">📥</div>
+                    <h2 class="card-title">Log Arriving Stock</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem;">
+                        Record new stock that arrived — purchase, transfer in, supplier delivery.
+                    </p>
+                    <button type="button" style="margin-top:1rem;">LOG ARRIVAL</button>
+                </div>
+                <div class="card hub-card" onclick="app.openSignatureUpload('arrival')">
+                    <div class="hub-icon">📷</div>
+                    <h2 class="card-title">Upload Signatures or Arrival Receipts</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem;">
+                        Photo of a delivery note, packing list, or signed receipt showing quantities of new stock.
+                    </p>
+                    <button type="button" style="margin-top:1rem;">UPLOAD RECEIPT</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Always available — not inside a hidden view, so camera/gallery keeps working -->
+        <input type="file" id="signature-file-input" accept="image/*" capture="environment" style="display: none;">
+
+        <!-- =========== ATTENDANCE VIEW =========== -->
+        <div id="attendance-view" class="container hidden">
+            <header>
+                <div class="header-info">
+                    <h1 id="attendance-title">Mark Attendance</h1>
+                    <p>
+                        Team leader: <span id="attendance-leader-name">—</span>
+                        <span id="attendance-date" style="opacity:0.7; margin-left:0.5rem;"></span>
+                    </p>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                    <button onclick="app.showHub()" class="secondary" style="width:auto;">← HUB</button>
+                    <button onclick="app.logout()" class="secondary" style="width:auto;">SIGN OUT</button>
+                </div>
+            </header>
+
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:0.5rem;">
+                    <h2 class="card-title" style="margin:0;">Operators
+                        <span id="attendance-marked-count" style="font-weight:400; color:var(--text-secondary); font-size:0.85rem;"></span>
+                    </h2>
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                        <button type="button" class="secondary" id="btn-mark-ontime-all" onclick="app.markAllAttendance('on_time')">Mark All On Time</button>
+                        <button type="button" class="secondary" onclick="app.exportAttendance()">📥 Export CSV</button>
+                    </div>
+                </div>
+                <p style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:1rem;">
+                    Tapping a status marks that operator immediately. Tap a different status to change.
+                </p>
+                <div id="attendance-list">
+                    <p style="color: var(--text-secondary); padding: 1rem 0;">Loading…</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== SIGNATURE UPLOAD VIEW =========== -->
+        <div id="signature-view" class="container hidden">
+            <header>
+                <div class="header-info">
+                    <h1 id="signature-title">Upload Signatures</h1>
+                    <p>Team leader: <span id="signature-leader-name">—</span></p>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                    <button id="signature-back-btn" onclick="app.cancelSignatureUpload()" class="secondary" style="width:auto;">← BACK</button>
+                    <button onclick="app.tryLogout()" class="secondary" style="width:auto;">SIGN OUT</button>
+                </div>
+            </header>
+            <div class="dashboard-grid single-col">
+                <div class="card">
+                    <h2 class="card-title">📷 Signature Photo Preview</h2>
+                    <div id="signature-preview-container" style="text-align:center; padding: 1rem; background: var(--input-bg); border-radius: 0.5rem; min-height: 200px; display: flex; align-items: center; justify-content: center;">
+                        <p style="color: var(--text-secondary);">No photo selected yet.</p>
+                    </div>
+                    <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 1rem;">
+                        Take a photo with your camera, or choose one from your gallery. Then tap Submit.
+                    </p>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label>NOTES (OPTIONAL)</label>
+                        <textarea id="signature-notes" placeholder="e.g. Morning shift, signed by 5 employees" rows="2"></textarea>
+                    </div>
+                    <button type="button" id="btn-submit-signature" onclick="app.submitSignature()" style="background-color: var(--accent-color);" disabled>
+                        📤 SUBMIT SIGNATURE
+                    </button>
+                    <button type="button" onclick="document.getElementById('signature-file-input').click()" class="secondary" style="margin-top: 0.5rem;">
+                        📁 Choose Photo Again
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== ISSUE STOCK VIEW =========== -->
+        <div id="leader-view" class="container hidden">
+            <header>
+                <div class="header-info">
+                    <h1 id="view-title">SUBSECTION</h1>
+                    <p>Team leader: <span id="leader-display-name">—</span></p>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                    <button onclick="app.tryLeaveIssuePage()" class="secondary" style="width:auto;">&larr; HUB</button>
+                    <button onclick="app.tryLogout()" class="secondary" style="width:auto;">SIGN OUT</button>
+                </div>
+            </header>
+            <div id="issue-photo-banner" class="hidden" style="background: rgba(239,68,68,0.12); border: 1px solid var(--danger-color); color: #fecaca; padding: 0.85rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 0.9rem;">
+                You have issued stock. Upload a photo of the signed issue list before you can leave this page.
+            </div>
+            <div class="dashboard-grid">
+                <div class="main-form">
+                    <div class="card">
+                        <h2 class="card-title">📤 Issue Stock</h2>
+                        <form id="movement-form">
+                            <div class="form-group">
+                                <label>ALLOCATE TO EMPLOYEE</label>
+                                <select id="allocate-employee" required>
+                                    <option value="">No employees added yet</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>WHAT ARE YOU ISSUING?</label>
+                                <div class="toggle-group">
+                                    <button type="button" class="toggle-btn active" data-type="PPE">PPE</button>
+                                    <button type="button" class="toggle-btn" data-type="CONSUMABLES">CONSUMABLES</button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>ITEM</label>
+                                <select id="item-select" required>
+                                    <option value="">Loading…</option>
+                                </select>
+                            </div>
+                            <div id="other-item-container" class="form-group hidden">
+                                <label>SPECIFY OTHER ITEM</label>
+                                <input type="text" id="other-item-text">
+                            </div>
+                            <div class="amount-grid">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label>AMOUNT ISSUED <span style="font-weight:400;color:var(--text-secondary);font-size:0.7rem;">(new stock)</span></label>
+                                    <input type="number" id="amount-issued" value="0" min="0">
+  >
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label>USED STOCK RETURNED <span style="font-weight:400;color:var(--text-secondary);font-size:0.7rem;">(disposed, audit only)</span></label>
+                                    <input type="number" id="amount-received" value="0" min="0" placeholder="0">
+                                </div>
+                            </div>
+                            <p id="stock-hint" style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                                &nbsp;
+                            </p>
+                            <div class="form-group" style="margin-top: 1.5rem;">
+                                <label>NOTES (OPTIONAL)</label>
+                                <textarea id="notes" placeholder="Job number, reason…" rows="2"></textarea>
+                            </div>
+                            <button type="submit">SUBMIT</button>
+                        </form>
+                        <p id="issue-save-status" style="font-size: 0.85rem; color: var(--success-color); margin-top: 0.75rem; min-height: 1.2em;"></p>
+                    </div>
+                    <div class="card" id="issue-signature-card">
+                        <h2 class="card-title">📷 Upload Signed Issue List</h2>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
+                            Issue to everyone first. Then photograph the signed list. You cannot return to Hub until that photo is uploaded.
+                        </p>
+                        <p id="issue-photo-status" style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.75rem;">No signed list uploaded yet this session.</p>
+                        <button type="button" onclick="app.openSignatureUpload('issue')">UPLOAD SIGNATURES</button>
+                    </div>
+                </div>
+                <div class="side-panels">
+                    <div class="card">
+                        <h2 class="card-title">My Shift Employees</h2>
+                        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                            Add the people on your shift. Every issue must be allocated to one of them.
+                        </p>
+                        <form id="add-employee" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                            <input type="text" placeholder="Employee full name" required>
+                            <button type="submit" style="width: auto; padding: 0.5rem 1rem;">ADD</button>
+                        </form>
+                        <ul id="employee-list" style="list-style: none; font-size: 0.875rem; color: var(--text-secondary);">
+                            <li>No employees added yet.</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <h2 class="card-title">Your Recent Entries</h2>
+                        <div id="recent-entries" style="font-size: 0.875rem; color: var(--text-secondary);">
+                            No entries yet.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== ARRIVAL VIEW =========== -->
+        <div id="arrival-view" class="container hidden">
+            <header>
+                <div class="header-info">
+                    <h1 id="arrival-title">SUBSECTION</h1>
+                    <p>Team leader: <span id="arrival-display-name">—</span></p>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                    <button onclick="app.showHub()" class="secondary" style="width:auto;">&larr; HUB</button>
+                    <button onclick="app.logout()" class="secondary" style="width:auto;">SIGN OUT</button>
+                </div>
+            </header>
+            <div class="dashboard-grid single-col">
+                <div class="main-form">
+                    <div class="card">
+                        <h2 class="card-title">📥 Log Arriving Stock</h2>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
+                            Recording new stock arriving. No employee allocation is needed.
+                        </p>
+                        <form id="arrival-form">
+                            <div class="form-group">
+                                <label>WHAT IS ARRIVING?</label>
+                                <div class="toggle-group">
+                                    <button type="button" class="toggle-btn active" data-type="PPE">PPE</button>
+                                    <button type="button" class="toggle-btn" data-type="CONSUMABLES">CONSUMABLES</button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>ITEM</label>
+                                <select id="arrival-item-select" required>
+                                    <option value="">Loading…</option>
+                                </select>
+                            </div>
+                            <div id="arrival-other-item-container" class="form-group hidden">
+                                <label>SPECIFY OTHER ITEM</label>
+                                <input type="text" id="arrival-other-item-text">
+                            </div>
+                            <div class="form-group">
+                                <label>AMOUNT RECEIVED</label>
+                                <input type="number" id="arrival-amount" value="0" min="0">
+                            </div>
+                            <div class="form-group">
+                                <label>NOTES (OPTIONAL) — Supplier, waybill number…</label>
+                                <textarea id="arrival-notes" placeholder="Supplier, waybill number…" rows="2"></textarea>
+                            </div>
+                            <button type="submit">SUBMIT ARRIVAL</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== MANAGE STOCK ITEMS (admin) =========== -->
+        <div id="stock-items-view" class="container hidden">
+            <header>
+                <div class="header-info">
+                    <h1>Manage Stock Items</h1>
+                    <p>These names appear in the Issue and Arrival dropdowns.</p>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                    <button onclick="app.renderAdminView()" class="secondary" style="width:auto;">← ADMIN</button>
+                    <button onclick="app.logout()" class="secondary" style="width:auto;">SIGN OUT</button>
+                </div>
+            </header>
+            <div class="dashboard-grid">
+                <div>
+                    <div class="card">
+                        <h2 class="card-title">Add a New Item</h2>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
+                            Example: add <strong>Nitrile Gloves</strong> and <strong>Leather Gloves</strong> as two separate Consumables.
+                        </p>
+                        <form id="add-stock-item-form">
+                            <div class="form-group">
+                                <label>ITEM NAME</label>
+                                <input type="text" id="new-item-name" required placeholder="e.g. Nitrile Gloves">
+                            </div>
+                            <div class="form-group">
+                                <label>CATEGORY</label>
+                                <select id="new-item-category" required>
+                                    <option value="PPE">PPE</option>
+                                    <option value="CONSUMABLES">CONSUMABLES</option>
+                                    <option value="BOTH">BOTH (shows in PPE and Consumables)</option>
+                                </select>
+                            </div>
+                            <button type="submit">ADD ITEM</button>
+                        </form>
+                    </div>
+                </div>
+                <div>
+                    <div class="card">
+                        <h2 class="card-title">Current Dropdown Items</h2>
+                        <div class="admin-table-container">
+                            <table id="stock-items-table">
+                                <thead><tr><th>Item</th><th>Category</th><th>Actions</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== STOCKTAKE (admin) =========== -->
+        <div id="stocktake-view" class="container hidden">
+            <header>
+                <div class="header-info">
+                    <h1>Stocktake</h1>
+                    <p>Count what is on the shelf. This sets usable stock for control and opening balances.</p>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                    <button onclick="app.renderAdminView()" class="secondary" style="width:auto;">← ADMIN</button>
+                    <button onclick="app.logout()" class="secondary" style="width:auto;">SIGN OUT</button>
+                </div>
+            </header>
+            <div class="card">
+                <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
+                    Current usable stock is what the app thinks you have (Arrived − Issued).
+                    Type the real counted amount. Leave a row unchanged if you did not count that item.
+                    Saving will adjust the difference so the app matches the count.
+                </p>
+                <div class="form-group">
+                    <label>NOTES (OPTIONAL)</label>
+                    <input type="text" id="stocktake-notes" placeholder="e.g. Opening balance 16 Sep 2026, or monthly stocktake">
+                </div>
+                <div class="admin-table-container">
+                    <table id="stocktake-table">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Category</th>
+                                <th>Current usable</th>
+                                <th>Counted qty</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <button type="button" id="btn-submit-stocktake" onclick="app.submitStocktake()" style="margin-top: 1.25rem;">
+                    SAVE STOCKTAKE
+                </button>
+            </div>
+        </div>
+
+        <!-- =========== SIGNATURES GALLERY (admin) =========== -->
+        <div id="signatures-gallery-view" class="container hidden">
+            <header>
+                <div class="header-info">
+                    <h1>Uploaded Photos</h1>
+                    <p>Signed issue lists and arrival receipts uploaded by team leaders.</p>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                    <button onclick="app.renderAdminView()" class="secondary" style="width:auto;">← ADMIN</button>
+                    <button onclick="app.logout()" class="secondary" style="width:auto;">SIGN OUT</button>
+                </div>
+            </header>
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                    <h2 class="card-title" style="margin-bottom: 0;">Saved Signatures <span id="signature-count" style="font-weight: 400; color: var(--text-secondary); font-size: 0.85rem;"></span></h2>
+                    <input type="text" id="signature-search" placeholder="Filter by leader/dept…" style="max-width: 260px;">
+                </div>
+                <div id="signatures-gallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem;">
+                    <p style="color: var(--text-secondary); grid-column: 1 / -1; padding:1rem 0;">Loading…</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== IMAGE LIGHTBOX =========== -->
+        <div id="signature-image-modal" class="modal" style="background: rgba(0,0,0,0.9);">
+            <button class="secondary" onclick="document.getElementById('signature-image-modal').style.display='none'" style="position: absolute; top: 1rem; right: 1rem; z-index: 1;">✕ Close</button>
+            <img id="signature-full-image" src="" alt="Signature" style="max-width: 95vw; max-height: 92vh; border-radius: 0.5rem; object-fit: contain;">
+        </div>
+
+        <!-- =========== CONFIRMATION MODAL =========== -->
+        <div id="confirm-modal" class="modal">
+            <div class="modal-content">
+                <h2 style="margin-bottom: 1rem;">Confirm Submission</h2>
+                <p id="confirm-details"></p>
+                <p style="margin-top: 1rem; font-weight: 600;">Are you sure you are happy with all your data?</p>
+                <div class="modal-actions">
+                    <button id="btn-cancel" class="secondary">Cancel</button>
+                    <button id="btn-confirm">Yes, Submit</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== WARNING MODAL (over-usable-stock) =========== -->
+        <div id="warning-modal" class="modal">
+            <div class="modal-content" style="border: 2px solid var(--danger-color);">
+                <h2 style="margin-bottom: 1rem; color: var(--danger-color);">⚠️ Warning: Stock Issue</h2>
+                <p id="warning-details"></p>
+                <div class="modal-actions">
+                    <button id="btn-warn-cancel" class="secondary">Cancel</button>
+                    <button id="btn-warn-force" style="background-color: var(--danger-color);">Submit Anyway</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== AUDIT WARNING MODAL (issued > received) =========== -->
+        <div id="audit-warning-modal" class="modal">
+            <div class="modal-content" style="border: 2px solid var(--danger-color);">
+                <h2 style="margin-bottom: 1rem; color: var(--danger-color);">⚠️ Audit Warning</h2>
+                <p id="audit-warning-details"></p>
+                <div class="modal-actions">
+                    <button id="btn-audit-cancel" class="secondary">Cancel</button>
+                    <button id="btn-audit-continue" style="background-color: var(--danger-color);">I am aware, override</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== OVERRIDE REASON MODAL =========== -->
+        <div id="override-modal" class="modal">
+            <div class="modal-content" style="border: 2px solid var(--danger-color);">
+                <h2 style="margin-bottom: 1rem; color: var(--danger-color);">📝 Override Reason Required</h2>
+                <p style="margin-bottom: 1rem;">You are issuing more consumables than what you received back from the employee. Please provide a reason.</p>
+                <div class="form-group">
+                    <label>REASON FOR OVERRIDE (REQUIRED)</label>
+                    <textarea id="override-reason" rows="3" placeholder="e.g. New employee has no prior issued stock, damaged stock previously reported, etc."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button id="btn-override-cancel" class="secondary">Cancel</button>
+                    <button id="btn-override-submit" style="background-color: var(--danger-color);">Submit with Override</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- =========== CLEAR DATA MODALS =========== -->
+        <div id="clear-warning-modal" class="modal">
+            <div class="modal-content" style="border: 2px solid var(--danger-color);">
+                <h2 style="margin-bottom: 1rem; color: var(--danger-color);">⚠️ Clear All Stock Data</h2>
+                <p id="clear-warning-details"></p>
+                <p style="margin-top: 1rem; font-weight: 600;">This action is permanent and cannot be undone.</p>
+                <div class="modal-actions">
+                    <button id="btn-clear-cancel-1" class="secondary">Cancel</button>
+                    <button id="btn-clear-continue" style="background-color: var(--danger-color);">I understand, continue</button>
+                </div>
+            </div>
+        </div>
+        <div id="clear-confirm-modal" class="modal">
+            <div class="modal-content" style="border: 2px solid var(--danger-color);">
+                <h2 style="margin-bottom: 1rem; color: var(--danger-color);">🔒 Final Verification</h2>
+                <p style="margin-bottom: 1rem;">Type the word <strong style="font-family:monospace;background:rgba(255,255,255,0.1);padding:0.1rem 0.4rem;border-radius:0.25rem;">CLEAR</strong> exactly:</p>
+                <div class="form-group">
+                    <input type="text" id="clear-typed-confirmation" placeholder="Type CLEAR to confirm" autocomplete="off">
+                </div>
+                <div class="modal-actions">
+                    <button id="btn-clear-cancel-2" class="secondary">Cancel</button>
+                    <button id="btn-clear-execute" style="background-color: var(--danger-color);" disabled>Permanently Delete All Data</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="script.js"></script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3c0b4b5fbea90cf',t:'MTc4OTU3MDQ2MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
+                </div>
+                <button onclick="app.logout()" class="secondary" style="width: auto;">SIGN OUT</button>
+            </header>
+            <div class="dashboard-grid">
+                <div>
+                    <div class="card">
+                        <h2 class="card-title">Add Team Leader</h2>
+                        <form id="add-leader-form">
+                            <div class="form-group">
+                                <label>Username (used to log in)</label>
+                                <input type="text" id="leader-username" required placeholder="e.g. sebastian">
+                            </div>
+                            <div class="form-group">
+                                <label>Full Name</label>
+                                <input type="text" id="leader-name" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Password</label>
+                                <input type="password" id="leader-pass" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Subsection</label>
+                                <select id="leader-subsection" required>
+                                    <option value="Management">Management</option>
+                                    <option value="Quality">Quality</option>
+                                    <option value="Logistics">Logistics</option>
+                                    <option value="Production">Production</option>
+                                    <option value="Paint">Paint</option>
+                                    <option value="Safety">Safety</option>
+                                </select>
+                            </div>
+                            <button type="submit">ADD TEAM LEADER</button>
+                        </form>
+                    </div>
+                    <div class="card">
+                        <h2 class="card-title">Registered Team Leaders</h2>
+                        <div class="admin-table-container">
+                            <table id="leaders-table">
+                                <thead><tr><th>Name</th><th>Subsection</th><th>Actions</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div class="card">
+                        <h2 class="card-title">Reports</h2>
+                        <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1rem;">
+                            Export all stock movements to a formatted Excel file.
+                        </p>
+                        <button onclick="app.exportData()">DOWNLOAD EXCEL SHEET</button>
+                        <button onclick="app.showSafeSignaturesGallery()" class="secondary" style="margin-top: 0.5rem; width: 100%;">
                             📸 VIEW EMPLOYEE SIGNATURES
                         </button>
                         <button onclick="app.showStockItemsPage()" class="secondary" style="margin-top: 0.5rem; width: 100%;">
