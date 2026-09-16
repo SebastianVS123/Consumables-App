@@ -107,6 +107,15 @@ button.secondary:hover {
     color: white;
 }
 
+button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+button:disabled:hover {
+    background-color: var(--accent-color);
+}
+
 /* Dashboard Layout */
 header {
     display: flex;
@@ -269,6 +278,54 @@ th {
     margin-bottom: 0.5rem;
 }
 
+/* Attendance */
+.attendance-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    margin-bottom: 0.75rem;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.attendance-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.attendance-actions button {
+    width: auto;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+}
+
+.att-active.ontime {
+    background: #22c55e;
+    color: #07130b;
+    border: none;
+}
+
+.att-active.late {
+    background: #f59e0b;
+    color: #171007;
+    border: none;
+}
+
+.att-active.absent {
+    background: #ef4444;
+    color: white;
+    border: none;
+}
+
+.stocktake-count-input {
+    max-width: 120px;
+    margin: 0;
+}
+
 /* Mobile Responsive */
 @media (max-width: 900px) {
     .container {
@@ -301,6 +358,15 @@ th {
     .login-card {
         padding: 2rem 1.5rem;
         margin: 1rem;
+    }
+
+    .attendance-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .attendance-actions button {
+        width: 100%;
     }
 }
 
