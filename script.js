@@ -331,6 +331,10 @@ const app = {
 
     async showHub() {
         if (!this.currentUser) return;
+        if (this._needsIssuePhoto) {
+            this.blockLeaveIssue('Please upload the signed issue list photo before returning to Hub.');
+            return;
+        }
         this.hideAllViews();
         document.getElementById('hub-view').classList.remove('hidden');
         document.getElementById('hub-title').textContent = `${this.currentUser.subsection} SUBSECTION`;
@@ -339,17 +343,69 @@ const app = {
         await this.loadEntries();
     },
 
+    tryLeaveIssuePage() {
+        if (this._needsIssuePhoto) {
+            this.blockLeaveIssue('You cannot leave Issue Stock until you upload a photo of the signed issue list.');
+            return;
+        }
+        this.showHub();
+    },
+
+    tryLogout() {
+        if (this._needsIssuePhoto) {
+            this.blockLeaveIssue('Upload the signed issue list photo before signing out.');
+            return;
+        }
+        this.logout();
+    },
+
+    blockLeaveIssue(msg) {
+        alert(msg);
+        const issueView = document.getElementById('leader-view');
+        const onIssuePage = issueView && !issueView.classList.contains('hidden');
+        if (!onIssuePage) {
+            this.hideAllViews();
+            document.getElementById('leader-view').classList.remove('hidden');
+        }
+        this.updateIssuePhotoBanner();
+        const card = document.getElementById('issue-signature-card');
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    },
+
+    updateIssuePhotoBanner() {
+        const banner = document.getElementById('issue-photo-banner');
+        const status = document.getElementById('issue-photo-status');
+        if (banner) banner.classList.toggle('hidden', !this._needsIssuePhoto);
+        if (status) {
+            status.textContent = this._needsIssuePhoto
+                ? 'Photo still required. Issue to everyone, then upload the signed list.'
+                : 'No signed list required right now. After you issue stock, a photo will be required before you can leave.';
+            status.style.color = this._needsIssuePhoto ? '#fecaca' : '';
+        }
+    },
+
     // ============ SIGNATURE UPLOAD (team leader flow) ============
-    openSignatureUpload() {
+    openSignatureUpload(purpose) {
+        this._signaturePurpose = purpose === 'issue' ? 'issue' : 'arrival';
+        this._signatureReturnTo = this._signaturePurpose === 'issue' ? 'issue' : 'hub';
         this.hideAllViews();
         document.getElementById('signature-view').classList.remove('hidden');
-        document.getElementById('signature-title').textContent = `${this.currentUser.subsection} — Upload Signatures`;
+        const isIssue = this._signaturePurpose === 'issue';
+        document.getElementById('signature-title').textContent = isIssue
+            ? `${this.currentUser.subsection} — Signed Issue List`
+            : `${this.currentUser.subsection} — Arrival Receipt`;
         document.getElementById('signature-leader-name').textContent = this.currentUser.name;
+        const backBtn = document.getElementById('signature-back-btn');
+        if (backBtn) backBtn.textContent = isIssue ? '← ISSUE' : '← HUB';
+        const notes = document.getElementById('signature-notes');
+        notes.value = '';
+        notes.placeholder = isIssue
+            ? 'e.g. Morning shift, signed by 5 employees'
+            : 'e.g. Supplier delivery note, waybill 123, 20 gloves received';
         document.getElementById('signature-preview-container').innerHTML =
             `<p style="color: var(--text-secondary);">No photo selected yet.</p>`;
-        document.getElementById('signature-notes').value = '';
         document.getElementById('btn-submit-signature').disabled = true;
-        document.getElementById('btn-submit-signature').textContent = '📤 SUBMIT SIGNATURE';
+        document.getElementById('btn-submit-signature').textContent = isIssue ? '📤 SUBMIT SIGNED LIST' : '📤 SUBMIT RECEIPT';
         this._pendingSignatureFile = null;
         this._submittingSignature = false;
         const input = document.getElementById('signature-file-input');
@@ -361,7 +417,8 @@ const app = {
         this._pendingSignatureFile = null;
         this._submittingSignature = false;
         document.getElementById('signature-file-input').value = '';
-        this.showHub();
+        if (this._signatureReturnTo === 'issue') this.showIssuePage();
+        else this.showHub();
     },
 
     async prepareImageFile(file) {
@@ -424,11 +481,13 @@ const app = {
             const { data: urlData } = db.storage.from('signatures').getPublicUrl(path);
             if (!urlData || !urlData.publicUrl) throw new Error('Failed to get public URL.');
 
+            const typedNotes = document.getElementById('signature-notes').value.trim();
+            const typeTag = this._signaturePurpose === 'issue' ? '[ISSUE LIST]' : '[ARRIVAL RECEIPT]';
             const meta = {
                 leader_id: this.currentUser.id || null,
                 leader_name: this.currentUser.name,
                 subsection: this.currentUser.subsection,
-                notes: document.getElementById('signature-notes').value.trim(),
+                notes: typedNotes ? `${typeTag} ${typedNotes}` : typeTag,
                 storage_path: path,
                 public_url: urlData.publicUrl,
                 leader_username: this.currentUser.username
@@ -441,7 +500,13 @@ const app = {
             }
             if (metaErr) throw metaErr;
 
-            alert('Signature photo uploaded successfully.');
+            if (this._signaturePurpose === 'issue') {
+                this._needsIssuePhoto = false;
+                this.updateIssuePhotoBanner();
+                alert('Signed issue list uploaded. You can issue to more people, or return to Hub.');
+            } else {
+                alert('Arrival receipt uploaded successfully.');
+            }
             this.cancelSignatureUpload();
         } catch (err) {
             alert('Upload failed: ' + (err.message || err));
@@ -839,6 +904,9 @@ const app = {
         this.setActiveToggle('movement-form', 'PPE');
         populateItemDropdown('item-select', 'PPE');
         this.refreshStockHint();
+        this.updateIssuePhotoBanner();
+        const saveStatus = document.getElementById('issue-save-status');
+        if (saveStatus && !this._needsIssuePhoto) saveStatus.textContent = '';
     },
 
     async showArrivalPage() {
@@ -1048,8 +1116,18 @@ const app = {
         document.getElementById(otherContainerId).classList.add('hidden');
         this.setActiveToggle(formId, 'PPE');
         populateItemDropdown(kind === 'issue' ? 'item-select' : 'arrival-item-select', 'PPE');
-        if (kind === 'issue') this.refreshStockHint();
         await this.loadEntries();
+        if (kind === 'issue') {
+            this._needsIssuePhoto = true;
+            this.refreshStockHint();
+            this.renderSidePanels();
+            this.updateIssuePhotoBanner();
+            const saveStatus = document.getElementById('issue-save-status');
+            if (saveStatus) {
+                saveStatus.textContent = `Saved for ${data.employee}. Issue the next person, then upload the signed list before you leave.`;
+            }
+            return;
+        }
         this.showHub();
     },
 
