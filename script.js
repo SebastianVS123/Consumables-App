@@ -1,3 +1,9 @@
+// Guard: if index.html accidentally includes this file twice, do not crash.
+if (window.__STOCK_APP_JS__) {
+    console.warn('script.js loaded twice — ignoring the second copy');
+} else {
+window.__STOCK_APP_JS__ = true;
+
 // ============== SUPABASE CONFIG ==============
 const SUPABASE_URL = 'https://okbscacqmsvmvmtewrlh.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rYnNjYWNxbXN2bXZtdGV3cmxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzE3NjAsImV4cCI6MjEwMjgwNzc2MH0.uf30y8ce13VoIUTB1eyfurxellJa0sShsXeb335AnQI'; // <-- paste your eyJ... key here
@@ -1207,4 +1213,6 @@ const app = {
     }
 };
 
+window.app = app;
 app.init();
+} // end duplicate-load guard
