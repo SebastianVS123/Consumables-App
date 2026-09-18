@@ -4,9 +4,16 @@ if (window.__STOCK_APP_JS__) {
 } else {
 window.__STOCK_APP_JS__ = true;
 
-// ============== SUPABASE CONFIG ==============
+// ============== SUPABASE CONFIG (GitHub Pages) ==============
 const SUPABASE_URL = 'https://okbscacqmsvmvmtewrlh.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rYnNjYWNxbXN2bXZtdGV3cmxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzE3NjAsImV4cCI6MjEwMjgwNzc2MH0.uf30y8ce13VoIUTB1eyfurxellJa0sShsXeb335AnQI'; // <-- paste your eyJ... key here
+
+let db;
+try {
+    db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} catch (e) {
+    console.error('Supabase init failed:', e);
+}
 
 // ============== ITEM CATALOG ==============
 const DEFAULT_ITEM_CATALOG = [
@@ -37,15 +44,12 @@ function populateItemDropdown(selectId, category) {
     if (!sel) return;
     const previousValue = sel.value;
     const filtered = ITEM_CATALOG.filter(i => i.category === category || i.category === 'BOTH');
+    if (!filtered.length) {
+        sel.innerHTML = '<option value="">No items — ask admin to add stock items</option>';
+        return;
+    }
     sel.innerHTML = filtered.map(i => `<option value="${escapeHtml(i.value)}">${escapeHtml(i.label)}</option>`).join('');
     if (filtered.some(i => i.value === previousValue)) sel.value = previousValue;
-}
-
-let db;
-try {
-    db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-} catch (e) {
-    console.error('Supabase init failed:', e);
 }
 
 // ============== ON-SCREEN ERROR DISPLAY ==============
@@ -74,6 +78,9 @@ const app = {
     stockItems: [],
     _pendingSignatureFile: null,
     _submittingSignature: false,
+    _needsIssuePhoto: false,
+    _signaturePurpose: 'arrival',
+    _signatureReturnTo: 'hub',
 
     async init() {
         try {
@@ -83,7 +90,7 @@ const app = {
 
         if (!db) { showPageError('Supabase not initialized.'); return; }
         if (SUPABASE_ANON_KEY === '<USER_LEGACY_KEY>') {
-            showPageError('Replace <USER_LEGACY_KEY> on line 4 with your actual eyJ... key.');
+            showPageError('Replace <USER_LEGACY_KEY> in script.js with your actual eyJ... key.');
             return;
         }
         this.setupEventListeners();
@@ -323,6 +330,17 @@ const app = {
                 const name = btn.getAttribute('data-emp-name');
                 const status = btn.getAttribute('data-att-status');
                 if (name && status) self.markAttendance(name, status);
+            });
+        }
+
+        const itemsTable = document.getElementById('stock-items-table');
+        if (itemsTable) {
+            itemsTable.addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-delete-item]');
+                if (!btn) return;
+                e.preventDefault();
+                e.stopPropagation();
+                self.deleteStockItem(btn.getAttribute('data-id') || '', btn.getAttribute('data-name') || '');
             });
         }
     },
@@ -607,7 +625,7 @@ const app = {
             .eq('leader_username', this.currentUser.username)
             .eq('log_date', today);
         if (error) {
-            alert('Could not load attendance: ' + error.message + '\n\nIf the attendance table is missing, run the Attendance SQL in Supabase first.');
+            alert('Could not load attendance: ' + error.message);
             this.attendance = [];
             return;
         }
@@ -731,13 +749,10 @@ const app = {
             }
             this.stockItems = data;
             ITEM_CATALOG = data.map(i => ({ value: i.name, label: i.name, category: i.category, id: i.id }));
-            if (!ITEM_CATALOG.some(i => i.value === 'Other')) {
-                ITEM_CATALOG.push({ value: 'Other', label: 'Other', category: 'BOTH' });
-            }
         } catch (e) {
-            console.warn('stock_items table not ready, using default catalog.', e);
+            console.warn('Could not load stock items, using built-in list.', e);
             ITEM_CATALOG = DEFAULT_ITEM_CATALOG.slice();
-            this.stockItems = [];
+            this.stockItems = DEFAULT_ITEM_CATALOG.map(i => ({ name: i.value, category: i.category, id: null }));
         }
     },
 
@@ -750,12 +765,13 @@ const app = {
         const { error } = await db.from('stock_items').insert(rows);
         if (error && !/duplicate/i.test(error.message || '')) {
             console.warn('Could not seed stock items:', error.message);
+            ITEM_CATALOG = DEFAULT_ITEM_CATALOG.slice();
+            this.stockItems = DEFAULT_ITEM_CATALOG.map(i => ({ name: i.value, category: i.category, id: null }));
+            return;
         }
         const { data } = await db.from('stock_items').select('*').order('sort_order', { ascending: true });
         this.stockItems = data || [];
-        if (this.stockItems.length) {
-            ITEM_CATALOG = this.stockItems.map(i => ({ value: i.name, label: i.name, category: i.category, id: i.id }));
-        }
+        ITEM_CATALOG = this.stockItems.map(i => ({ value: i.name, label: i.name, category: i.category, id: i.id }));
     },
 
     async showStockItemsPage() {
@@ -768,16 +784,18 @@ const app = {
     renderStockItemsTable() {
         const tbody = document.querySelector('#stock-items-table tbody');
         if (!tbody) return;
-        const items = this.stockItems.length
-            ? this.stockItems
-            : ITEM_CATALOG.map(i => ({ name: i.value, category: i.category, id: i.id || null }));
+        const items = this.stockItems || [];
+        if (!items.length) {
+            tbody.innerHTML = `<tr><td colspan="3" style="color:var(--text-secondary);">No stock items yet. Add one on the left.</td></tr>`;
+            return;
+        }
         tbody.innerHTML = items.map(i => {
-            const isOther = i.name === 'Other';
-            const idAttr = i.id ? String(i.id) : '';
+            const idAttr = escapeHtml(i.id || '');
+            const nameAttr = escapeHtml(i.name || '');
             return `<tr>
                 <td>${escapeHtml(i.name)}</td>
                 <td>${escapeHtml(i.category)}</td>
-                <td>${isOther ? '<span style="color:var(--text-secondary);font-size:0.75rem;">Locked</span>' : `<button type="button" class="secondary" style="padding:0.25rem 0.5rem;font-size:0.75rem;width:auto;" onclick="app.deleteStockItem('${idAttr}', ${JSON.stringify(i.name)})">Delete</button>`}</td>
+                <td><button type="button" class="secondary btn-small" data-delete-item="1" data-id="${idAttr}" data-name="${nameAttr}">Delete</button></td>
             </tr>`;
         }).join('');
     },
@@ -792,7 +810,7 @@ const app = {
         const sort_order = (this.stockItems.length || ITEM_CATALOG.length) + 1;
         const { error } = await db.from('stock_items').insert([{ name, category, sort_order }]);
         if (error) {
-            alert('Could not add item: ' + error.message + '\n\nIf the stock_items table is missing, run the SQL in the instructions first.');
+            alert('Could not add item: ' + error.message);
             return;
         }
         document.getElementById('new-item-name').value = '';
@@ -802,8 +820,8 @@ const app = {
     },
 
     async deleteStockItem(id, name) {
-        if (name === 'Other') return alert('The Other option cannot be deleted.');
-        if (!confirm(`Remove "${name}" from the dropdown list?\n\nPast stock records for this item are kept.`)) return;
+        if (!name && !id) return;
+        if (!confirm(`Remove "${name}" from the dropdown list?\n\nPast stock records for this item are kept. Team leaders will no longer see it when issuing or logging arrivals.`)) return;
         let query = db.from('stock_items').delete();
         if (id) query = query.eq('id', id);
         else query = query.eq('name', name);
@@ -811,6 +829,8 @@ const app = {
         if (error) return alert('Could not delete: ' + error.message);
         await this.loadStockItems();
         this.renderStockItemsTable();
+        populateItemDropdown('item-select', 'PPE');
+        populateItemDropdown('arrival-item-select', 'PPE');
     },
 
     // ============ STOCKTAKE (admin) ============
@@ -948,7 +968,12 @@ const app = {
     },
 
     async logout() {
+        if (this._needsIssuePhoto) {
+            this.blockLeaveIssue('Upload the signed issue list photo before signing out.');
+            return;
+        }
         this.currentUser = null;
+        this._needsIssuePhoto = false;
         sessionStorage.removeItem('current_user');
         this.hideAllViews();
         document.getElementById('login-view').classList.remove('hidden');
