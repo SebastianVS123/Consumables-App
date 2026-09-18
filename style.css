@@ -116,6 +116,12 @@ button:disabled:hover {
     background-color: var(--accent-color);
 }
 
+button.btn-small {
+    width: auto;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+}
+
 /* Dashboard Layout */
 header {
     display: flex;
