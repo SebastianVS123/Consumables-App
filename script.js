@@ -64,8 +64,14 @@ function showPageError(msg) {
     el.textContent = '⚠️ ' + msg;
     console.error('PAGE ERROR:', msg);
 }
-window.addEventListener('error', (event) => { showPageError('JS error: ' + event.message); });
-window.addEventListener('unhandledrejection', (event) => { showPageError('Promise error: ' + (event.reason && event.reason.message ? event.reason.message : event.reason)); });
+window.addEventListener('error', (event) => {
+    const where = event.filename ? (' (' + String(event.filename).split('/').pop() + ':' + event.lineno + ')') : '';
+    showPageError('JS error: ' + event.message + where);
+});
+window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason && event.reason.message ? event.reason.message : event.reason;
+    showPageError('Promise error: ' + reason);
+});
 
 // ============== APP STATE ==============
 const app = {
@@ -795,7 +801,7 @@ const app = {
             return `<tr>
                 <td>${escapeHtml(i.name)}</td>
                 <td>${escapeHtml(i.category)}</td>
-                <td><button type="button" class="secondary btn-small" data-delete-item="1" data-id="${idAttr}" data-name="${nameAttr}">Delete</button></td>
+                <td><button type="button" class="secondary btn-small" data-delete-item="1" data-id="${idAttr}" data-name="${nameAttr}" onclick="app.deleteStockItem(this.getAttribute('data-id'), this.getAttribute('data-name')); return false;">Delete</button></td>
             </tr>`;
         }).join('');
     },
@@ -820,17 +826,25 @@ const app = {
     },
 
     async deleteStockItem(id, name) {
-        if (!name && !id) return;
-        if (!confirm(`Remove "${name}" from the dropdown list?\n\nPast stock records for this item are kept. Team leaders will no longer see it when issuing or logging arrivals.`)) return;
-        let query = db.from('stock_items').delete();
-        if (id) query = query.eq('id', id);
-        else query = query.eq('name', name);
-        const { error } = await query;
-        if (error) return alert('Could not delete: ' + error.message);
-        await this.loadStockItems();
-        this.renderStockItemsTable();
-        populateItemDropdown('item-select', 'PPE');
-        populateItemDropdown('arrival-item-select', 'PPE');
+        try {
+            if (!name && !id) return;
+            const label = name || 'this item';
+            if (!confirm('Remove "' + label + '" from the dropdown list?\n\nPast stock records for this item are kept.')) return;
+            let result;
+            if (id) {
+                result = await db.from('stock_items').delete().eq('id', id);
+            } else {
+                result = await db.from('stock_items').delete().eq('name', name);
+            }
+            if (result && result.error) {
+                alert('Could not delete: ' + result.error.message);
+                return;
+            }
+            await this.loadStockItems();
+            this.renderStockItemsTable();
+        } catch (e) {
+            alert('Could not delete: ' + (e && e.message ? e.message : e));
+        }
     },
 
     // ============ STOCKTAKE (admin) ============
